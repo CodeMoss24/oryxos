@@ -125,7 +125,7 @@ const scenarios = computed(() => [
           <a class="oryx-btn-ghost" :href="t('/docs/concepts', '/en/docs/concepts')">
             {{ t('核心概念', 'Core Concepts') }}
           </a>
-          <a class="oryx-btn-ghost" href="https://github.com/CodeMoss24/oryx-labs" target="_blank" rel="noopener">
+          <a class="oryx-btn-ghost" href="https://github.com/CodeMoss24/oryxos" target="_blank" rel="noopener">
             GitHub
           </a>
         </div>
@@ -387,7 +387,7 @@ oryxos profile create daily-weather
 # Define intent → ReAct + Tools handle the rest</code></pre>
           <div class="oryx-cta-links">
             <a class="oryx-btn-primary" :href="t('/docs/quick-start', '/en/docs/quick-start')">{{ t('快速开始', 'Quick Start') }}</a>
-            <a class="oryx-btn-ghost" href="https://github.com/CodeMoss24/oryx-labs" target="_blank" rel="noopener">GitHub</a>
+            <a class="oryx-btn-ghost" href="https://github.com/CodeMoss24/oryxos" target="_blank" rel="noopener">GitHub</a>
           </div>
         </div>
       </div>

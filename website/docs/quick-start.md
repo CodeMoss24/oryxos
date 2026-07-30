@@ -11,7 +11,7 @@
 ## 1. 初始化工作区
 
 ```bash
-git clone https://github.com/CodeMoss24/oryx-labs.git
+git clone https://github.com/CodeMoss24/oryxos.git
 cd oryxos
 mvn clean package -DskipTests
 ```

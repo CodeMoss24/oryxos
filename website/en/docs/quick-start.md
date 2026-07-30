@@ -11,7 +11,7 @@ Run your first OryxOS Agent in 5 minutes.
 ## 1. Initialize Workspace
 
 ```bash
-git clone https://github.com/CodeMoss24/oryx-labs.git
+git clone https://github.com/CodeMoss24/oryxos.git
 cd oryxos
 mvn clean package -DskipTests
 ```

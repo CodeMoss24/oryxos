@@ -30,7 +30,7 @@ export default defineConfig({
         nav: [
           { text: '首页', link: '/' },
           { text: '文档', link: '/docs/overview' },
-          { text: 'GitHub', link: 'https://github.com/CodeMoss24/oryx-labs' },
+          { text: 'GitHub', link: 'https://github.com/CodeMoss24/oryxos' },
         ],
         sidebar: {
           '/docs/': [
@@ -80,7 +80,7 @@ export default defineConfig({
         nav: [
           { text: 'Home', link: '/en/' },
           { text: 'Docs', link: '/en/docs/overview' },
-          { text: 'GitHub', link: 'https://github.com/CodeMoss24/oryx-labs' },
+          { text: 'GitHub', link: 'https://github.com/CodeMoss24/oryxos' },
         ],
         sidebar: {
           '/en/docs/': [
@@ -128,7 +128,7 @@ export default defineConfig({
     siteTitle: false,
     logo: '/logo.svg',
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/CodeMoss24/oryx-labs' },
+      { icon: 'github', link: 'https://github.com/CodeMoss24/oryxos' },
     ],
   },
 })
