@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 760" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1040" height="760" fill="#fafafa"/>
+
+  <!-- Title -->
+  <text x="520" y="34" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">OryxOS Architecture</text>
+  <text x="520" y="58" text-anchor="middle" font-size="13" fill="#64748b">三触发源 → AgentService → ReAct 引擎 → 三大能力 → 基础层</text>
+
+  <!-- ============ Layer 1: Triggers (接入层) ============ -->
+  <text x="80" y="92" font-size="11" font-weight="600" fill="#2563eb" letter-spacing="0.5">接入层 · TRIGGERS</text>
+
+  <!-- CLI Channel -->
+  <rect x="80" y="100" width="260" height="64" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="210" y="128" text-anchor="middle" font-size="15" font-weight="600" fill="#1e3a8a">CLI Channel</text>
+  <text x="210" y="148" text-anchor="middle" font-size="12" fill="#3730a3">oryxos chat · 人推</text>
+
+  <!-- Web Service -->
+  <rect x="390" y="100" width="260" height="64" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="520" y="128" text-anchor="middle" font-size="15" font-weight="600" fill="#1e3a8a">Web Service</text>
+  <text x="520" y="148" text-anchor="middle" font-size="12" fill="#3730a3">REST API · 人推</text>
+
+  <!-- AgentScheduler -->
+  <rect x="700" y="100" width="260" height="64" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="830" y="128" text-anchor="middle" font-size="15" font-weight="600" fill="#1e3a8a">AgentScheduler</text>
+  <text x="830" y="148" text-anchor="middle" font-size="12" fill="#3730a3">cron 定时 · 钟推</text>
+
+  <!-- Arrows: Triggers → AgentService -->
+  <line x1="210" y1="164" x2="210" y2="198" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="520" y1="164" x2="520" y2="198" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="830" y1="164" x2="830" y2="198" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ============ Layer 2: AgentService (统一入口) ============ -->
+  <text x="80" y="190" font-size="11" font-weight="600" fill="#7c3aed" letter-spacing="0.5">统一入口 · ENTRY</text>
+
+  <rect x="80" y="198" width="880" height="56" rx="8" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="520" y="222" text-anchor="middle" font-size="15" font-weight="600" fill="#312e81">AgentService</text>
+  <text x="520" y="240" text-anchor="middle" font-size="12" fill="#4338ca">process(Session, msg)  ·  ProfileContext (ThreadLocal)  ·  持久化 Session</text>
+
+  <!-- Arrow: AgentService → ReActLoop -->
+  <line x1="520" y1="254" x2="520" y2="288" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ============ Layer 3: Engine (引擎层) ============ -->
+  <text x="80" y="280" font-size="11" font-weight="600" fill="#d97706" letter-spacing="0.5">引擎层 · ENGINE</text>
+
+  <!-- PromptBuilder (left) -->
+  <rect x="80" y="290" width="220" height="76" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="190" y="316" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">PromptBuilder</text>
+  <text x="190" y="336" text-anchor="middle" font-size="11" fill="#92400e">system + Bootstrap</text>
+  <text x="190" y="352" text-anchor="middle" font-size="11" fill="#92400e">+ Memory + 历史 + Tool</text>
+
+  <!-- ReActLoop (center) -->
+  <rect x="380" y="290" width="280" height="76" rx="8" fill="#fde68a" stroke="#f59e0b" stroke-width="2"/>
+  <text x="520" y="316" text-anchor="middle" font-size="16" font-weight="700" fill="#78350f">ReActLoop</text>
+  <text x="520" y="336" text-anchor="middle" font-size="12" fill="#92400e">Reason + Act · 自实现</text>
+  <text x="520" y="352" text-anchor="middle" font-size="11" fill="#92400e">MAX_ITER = 10  ·  禁用 Spring AI 自动执行</text>
+
+  <!-- ToolExecutor (right) -->
+  <rect x="740" y="290" width="220" height="76" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="850" y="316" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">ToolExecutor</text>
+  <text x="850" y="336" text-anchor="middle" font-size="11" fill="#92400e">Sandbox 检查 + 执行</text>
+  <text x="850" y="352" text-anchor="middle" font-size="11" fill="#92400e">写 tool_invocations</text>
+
+  <!-- Arrows: PromptBuilder ↔ ReActLoop ↔ ToolExecutor -->
+  <line x1="300" y1="328" x2="378" y2="328" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="662" y1="328" x2="738" y2="328" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows: ReActLoop → 3 capabilities -->
+  <line x1="520" y1="366" x2="520" y2="392" stroke="#475569" stroke-width="1.5"/>
+  <line x1="210" y1="392" x2="830" y2="392" stroke="#475569" stroke-width="1.5"/>
+  <line x1="210" y1="392" x2="210" y2="418" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="520" y1="392" x2="520" y2="418" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="830" y1="392" x2="830" y2="418" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ============ Layer 4: Capabilities (能力层) ============ -->
+  <text x="80" y="410" font-size="11" font-weight="600" fill="#059669" letter-spacing="0.5">能力层 · CAPABILITIES</text>
+
+  <!-- Provider -->
+  <rect x="80" y="418" width="260" height="104" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="210" y="442" text-anchor="middle" font-size="15" font-weight="600" fill="#064e3b">Provider · 能力一</text>
+  <line x1="100" y1="450" x2="320" y2="450" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="210" y="468" text-anchor="middle" font-size="11" fill="#065f46">Spring AI Alibaba</text>
+  <text x="210" y="486" text-anchor="middle" font-size="11" fill="#065f46">DeepSeek · 通义 · Kimi</text>
+  <text x="210" y="504" text-anchor="middle" font-size="11" fill="#065f46">智谱 · 混元 · 豆包 · …</text>
+  <text x="210" y="518" text-anchor="middle" font-size="10" fill="#047857" font-style="italic">provider name → ChatModel 显式映射</text>
+
+  <!-- Memory -->
+  <rect x="390" y="418" width="260" height="104" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="520" y="442" text-anchor="middle" font-size="15" font-weight="600" fill="#064e3b">Memory · 能力三</text>
+  <line x1="410" y1="450" x2="630" y2="450" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="520" y="468" text-anchor="middle" font-size="11" fill="#065f46">MemoryService 统一门面</text>
+  <text x="520" y="486" text-anchor="middle" font-size="11" fill="#065f46">Session + MEMORY.md</text>
+  <text x="520" y="504" text-anchor="middle" font-size="11" fill="#065f46">核心区 / 归档区</text>
+  <text x="520" y="518" text-anchor="middle" font-size="10" fill="#047857" font-style="italic">Markdown / SQLite / Mem0 三档</text>
+
+  <!-- Tool -->
+  <rect x="700" y="418" width="260" height="104" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+  <text x="830" y="442" text-anchor="middle" font-size="15" font-weight="600" fill="#064e3b">Tool · 能力四</text>
+  <line x1="720" y1="450" x2="940" y2="450" stroke="#a7f3d0" stroke-width="1"/>
+  <text x="830" y="468" text-anchor="middle" font-size="11" fill="#065f46">9 内置 Tool + Plugin 三档</text>
+  <text x="830" y="486" text-anchor="middle" font-size="11" fill="#065f46">MCP Client + ToolRegistry</text>
+  <text x="830" y="504" text-anchor="middle" font-size="11" fill="#065f46">Sandbox + NotifyChannelAdapter</text>
+  <text x="830" y="518" text-anchor="middle" font-size="10" fill="#047857" font-style="italic">OryxTool 抽象统一接口</text>
+
+  <!-- Arrows: Capabilities → Base -->
+  <line x1="210" y1="522" x2="210" y2="552" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow-light)"/>
+  <line x1="520" y1="522" x2="520" y2="552" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow-light)"/>
+  <line x1="830" y1="522" x2="830" y2="552" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow-light)"/>
+
+  <!-- ============ Layer 5: Base (基础层) ============ -->
+  <text x="80" y="544" font-size="11" font-weight="600" fill="#475569" letter-spacing="0.5">基础层 · BASE</text>
+
+  <rect x="80" y="552" width="880" height="148" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+
+  <!-- SQLite column -->
+  <rect x="104" y="568" width="256" height="124" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="232" y="592" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">SQLite (oryxos.db)</text>
+  <line x1="124" y1="602" x2="340" y2="602" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="120" y="620" font-size="11" fill="#334155">• sessions</text>
+  <text x="120" y="642" font-size="11" fill="#334155">• tool_invocations</text>
+  <text x="120" y="664" font-size="11" fill="#334155">• llm_calls</text>
+  <text x="120" y="686" font-size="11" fill="#334155">• scheduled_tasks</text>
+
+  <!-- Filesystem column -->
+  <rect x="392" y="568" width="256" height="124" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="520" y="592" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">文件系统 (.oryxos/)</text>
+  <line x1="412" y1="602" x2="628" y2="602" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="408" y="620" font-size="11" fill="#334155">• agents/ (AGENT.md)</text>
+  <text x="408" y="642" font-size="11" fill="#334155">• skills/ (全局 Skill)</text>
+  <text x="408" y="664" font-size="11" fill="#334155">• memory/MEMORY.md</text>
+  <text x="408" y="686" font-size="11" fill="#334155">• AGENTS/SOUL/USER.md</text>
+
+  <!-- Config column -->
+  <rect x="680" y="568" width="256" height="124" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="808" y="592" text-anchor="middle" font-size="13" font-weight="600" fill="#0f172a">配置与上下文</text>
+  <line x1="700" y1="602" x2="916" y2="602" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="696" y="620" font-size="11" fill="#334155">• Profile / AgentLoader</text>
+  <text x="696" y="642" font-size="11" fill="#334155">• ContextLoader</text>
+  <text x="696" y="664" font-size="11" fill="#334155">• ConfigLoader (密钥)</text>
+  <text x="696" y="686" font-size="11" fill="#334155">• mcp_servers.yaml</text>
+
+  <!-- ============ Legend ============ -->
+  <rect x="80" y="708" width="14" height="14" rx="2" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="102" y="720" font-size="11" fill="#475569">人推触发 (CLI / Web)</text>
+
+  <rect x="260" y="708" width="14" height="14" rx="2" fill="#dbeafe" stroke="#3b82f6" stroke-width="1"/>
+  <text x="282" y="720" font-size="11" fill="#475569">钟推触发 (Scheduler)</text>
+
+  <rect x="440" y="708" width="14" height="14" rx="2" fill="#fde68a" stroke="#f59e0b" stroke-width="1"/>
+  <text x="462" y="720" font-size="11" fill="#475569">ReAct 引擎 (自实现)</text>
+
+  <rect x="620" y="708" width="14" height="14" rx="2" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>
+  <text x="642" y="720" font-size="11" fill="#475569">五大核心能力</text>
+
+  <rect x="780" y="708" width="14" height="14" rx="2" fill="#f1f5f9" stroke="#64748b" stroke-width="1"/>
+  <text x="802" y="720" font-size="11" fill="#475569">基础层 (存储 + 配置)</text>
+
+  <text x="520" y="744" text-anchor="middle" font-size="10" fill="#94a3b8">三个触发源复用同一条 AgentService.process 链路 · ReActLoop 不感知触发来源</text>
+</svg>

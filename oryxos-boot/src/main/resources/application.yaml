@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: oryxos
+  threads:
+    virtual:
+      enabled: true
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
+  datasource:
+    url: jdbc:sqlite:.oryxos/oryxos.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: com.oryxos.storage.config.SQLiteDialect
+    open-in-view: false
+
+oryxos:
+  workspace: .oryxos
+  memory:
+    backend: markdown
+  sandbox:
+    file:
+      allowed-paths: .oryxos
+    shell:
+      allowed-commands: ls,cat,echo,date,python,git
+    http:
+      allowed-domains: ""
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

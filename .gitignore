@@ -1,0 +1,28 @@
+# Java
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+website/node_modules/
+website/.vitepress/dist/
+website/.vitepress/cache/
+
+# OryxOS runtime
+.oryxos/
+
+# Logs
+*.log

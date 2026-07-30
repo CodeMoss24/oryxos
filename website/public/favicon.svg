@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="OryxOS">
+  <defs>
+    <linearGradient id="oryxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF9A1F"/>
+      <stop offset="100%" stop-color="#FF5A00"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8,8)">
+    <path d="M 38 44 C 28 24, 22 10, 30 -2 C 36 12, 42 26, 48 40 Z"
+          fill="url(#oryxGrad)"/>
+    <path d="M 74 44 C 84 24, 90 10, 82 -2 C 76 12, 70 26, 64 40 Z"
+          fill="url(#oryxGrad)"/>
+    <circle cx="56" cy="60" r="34" fill="none" stroke="url(#oryxGrad)" stroke-width="8"/>
+    <circle cx="56" cy="60" r="6" fill="url(#oryxGrad)"/>
+  </g>
+</svg>

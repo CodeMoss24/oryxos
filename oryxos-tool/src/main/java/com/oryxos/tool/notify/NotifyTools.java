@@ -1,0 +1,46 @@
+package com.oryxos.tool.notify;
+
+import com.oryxos.core.profile.Profile;
+import com.oryxos.core.profile.ProfileContext;
+import com.oryxos.core.tool.OryxTool;
+import com.oryxos.core.tool.ToolResult;
+import com.oryxos.tool.builtin.FileTools;
+import org.springframework.stereotype.Component;
+
+/**
+ * 把消息推送到 Profile 配置好的通知渠道。
+ * LLM 大多数时候只需要传 content,地址是运行时配置(从 ProfileContext 取 notify_channels)。
+ */
+@Component("notify")
+public class NotifyTools implements OryxTool {
+
+    private final WebhookNotifyAdapter adapter;
+
+    public NotifyTools(WebhookNotifyAdapter adapter) {
+        this.adapter = adapter;
+    }
+
+    @Override public String getName() { return "notify"; }
+    @Override public String getDescription() { return "把消息推送到 Profile notify_channels 配置的目标"; }
+    @Override public String getInputSchema() {
+        return "{\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\"},"
+                + "\"channel\":{\"type\":\"string\"}},\"required\":[\"content\"]}";
+    }
+    @Override public ToolResult execute(String inputJson) {
+        String content = FileTools.extractField(inputJson, "content");
+        String channel = FileTools.extractField(inputJson, "channel");
+        Profile profile = ProfileContext.get();
+        if (profile == null || profile.getNotifyChannels() == null || profile.getNotifyChannels().isEmpty()) {
+            return ToolResult.failure("no notify_channels configured", false);
+        }
+        for (Profile.NotifyChannel nc : profile.getNotifyChannels()) {
+            if (!channel.isBlank() && !channel.equals(nc.type())) continue;
+            try {
+                adapter.send(new NotifyChannelAdapter.NotifyTarget(nc.type(), nc.config()), content);
+            } catch (Exception e) {
+                return ToolResult.failure(e.getMessage(), false);
+            }
+        }
+        return ToolResult.success("notified");
+    }
+}
