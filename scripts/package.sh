@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+# Package OryxOS changed files into a tar.gz and sync to remote server.
+# Usage: ./scripts/package.sh [output_dir]
+#
+# 工作原理：
+#   1. 通过 git diff 检测本地变更文件（已提交未推送 / 工作区修改 / 未跟踪新文件）
+#   2. 将变更文件打包成 tar.gz，scp 上传到远程服务器
+#   3. 远程服务器解包 → commit → push
+#   4. 本地 rebase 到 origin，保持历史一致
+#
+# target/ 下的文件不会被传到远程（脚本内显式过滤 + .gitignore 双重保障）
+
+set -euo pipefail
+
+# ── Configuration（按需修改） ──────────────────────────────────────────────────
+REMOTE_HOST="ubuntu@81.70.8.164"
+REMOTE_DIR="/home/ubuntu/oryxos"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+OUTPUT_DIR="${1:-$PROJECT_ROOT}"
+
+# ── Logging helpers ────────────────────────────────────────────────────────────
+info()  { echo "[INFO]  $*"; }
+warn()  { echo "[WARN]  $*" >&2; }
+error() { echo "[ERROR] $*" >&2; }
+
+# ── Commit message builder ──────────────────────────────────────────────────────
+build_commit_message() {
+  local changed="$1" deleted="$2"
+  local n_changed n_deleted areas subject
+  local -i cap=30
+
+  n_changed=$(printf '%s\n' "$changed" | grep -c '[^[:space:]]' || true)
+  n_deleted=$(printf '%s\n' "$deleted" | grep -c '[^[:space:]]' || true)
+  [[ "$n_changed" =~ ^[0-9]+$ ]] || n_changed=0
+  [[ "$n_deleted" =~ ^[0-9]+$ ]] || n_deleted=0
+
+  areas=$(printf '%s\n%s\n' "$changed" "$deleted" \
+    | grep '[^[:space:]]' \
+    | sed 's#/.*##' \
+    | sort -u | paste -sd ', ' -)
+
+  if [[ "$n_changed" -gt 0 && "$n_deleted" -gt 0 ]]; then
+    subject="chore: sync ${areas:-changes} (${n_changed} changed, ${n_deleted} deleted)"
+  elif [[ "$n_deleted" -gt 0 ]]; then
+    subject="chore: remove ${n_deleted} file(s) in ${areas:-repo}"
+  else
+    subject="chore: update ${areas:-changes} (${n_changed} file(s))"
+  fi
+
+  printf '%s\n' "$subject"
+  if [[ "$n_changed" -gt 0 ]]; then
+    printf '\nChanged:\n'
+    printf '%s\n' "$changed" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
+    [[ "$n_changed" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_changed - cap))"
+  fi
+  if [[ "$n_deleted" -gt 0 ]]; then
+    printf '\nDeleted:\n'
+    printf '%s\n' "$deleted" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
+    [[ "$n_deleted" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_deleted - cap))"
+  fi
+}
+
+# ── Version / archive name ─────────────────────────────────────────────────────
+VERSION=$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null || echo "dev")
+TIMESTAMP=$(date +%Y%m%d%H%M%S)_$$
+ARCHIVE="$OUTPUT_DIR/oryxos-${VERSION}-${TIMESTAMP}.tar.gz"
+
+trap 'rm -f "$ARCHIVE"' EXIT
+
+# ── Branch detection ───────────────────────────────────────────────────────────
+LOCAL_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
+info "Local branch: ${LOCAL_BRANCH}"
+
+# ── Collect changed files ──────────────────────────────────────────────────────
+# 1. Committed locally but not yet pushed
+COMMITTED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=ACM \
+  "origin/${LOCAL_BRANCH}" HEAD 2>/dev/null || true)
+
+# 2. Modified in working tree but not committed
+WORKDIR_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=ACM \
+  HEAD 2>/dev/null || true)
+
+# 3. Untracked new files (respects .gitignore → node_modules, website/.vitepress 等自动排除)
+UNTRACKED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false ls-files --others --exclude-standard \
+  2>/dev/null || true)
+
+# 4. Files deleted locally that exist on origin → remove on remote
+_DELETED_RAW=$(printf '%s\n%s\n%s' \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=D \
+      "origin/${LOCAL_BRANCH}" HEAD 2>/dev/null || true)" \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --cached --name-only --diff-filter=D \
+      2>/dev/null || true)" \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=D \
+      2>/dev/null || true)" \
+  | sort -u)
+DELETED_FILES=""
+while IFS= read -r f; do
+  [[ -n "$f" && ! -e "$PROJECT_ROOT/$f" ]] && DELETED_FILES="${DELETED_FILES}${f}"$'\n'
+done <<< "$_DELETED_RAW"
+DELETED_FILES="${DELETED_FILES%$'\n'}"
+
+# Combine, deduplicate, and explicitly filter out unwanted paths
+count_lines() { echo "${1}" | grep -c '[^[:space:]]' 2>/dev/null || echo 0; }
+
+ALL_FILES=$(printf '%s\n%s\n%s' \
+    "$COMMITTED_FILES" "$WORKDIR_FILES" "$UNTRACKED_FILES" \
+  | grep -v '\.tar\.gz$' \
+  | grep -v '^target/' \
+  | grep -v '/target/' \
+  | grep '[^[:space:]]' \
+  | sort -u || true)
+
+# ── Debug summary ──────────────────────────────────────────────────────────────
+echo "--- File sources ---"
+info "[committed vs origin] $(count_lines "$COMMITTED_FILES") file(s)"
+echo "$COMMITTED_FILES" | grep '[^[:space:]]' | sed 's/^/  + /' || true
+info "[workdir vs HEAD]     $(count_lines "$WORKDIR_FILES") file(s)"
+echo "$WORKDIR_FILES"   | grep '[^[:space:]]' | sed 's/^/  ~ /' || true
+info "[untracked]           $(count_lines "$UNTRACKED_FILES") file(s)"
+echo "$UNTRACKED_FILES" | grep '[^[:space:]]' | sed 's/^/  ? /' || true
+info "[deleted locally]     $(count_lines "$DELETED_FILES") file(s)"
+echo "$DELETED_FILES"   | grep '[^[:space:]]' | sed 's/^/  - /' || true
+echo "--------------------"
+
+# ── Build archive ──────────────────────────────────────────────────────────────
+if [[ -z "$ALL_FILES" ]]; then
+  info "No changed files to package."
+  SKIP_ARCHIVE=1
+else
+  SKIP_ARCHIVE=0
+  FILE_COUNT=$(echo "$ALL_FILES" | grep -c '[^[:space:]]')
+  info "Packaging ${FILE_COUNT} file(s):"
+  echo "$ALL_FILES" | sed 's/^/  /'
+  echo "$ALL_FILES" | tr '\n' '\0' \
+    | COPYFILE_DISABLE=1 tar czf "$ARCHIVE" -C "$PROJECT_ROOT" --null -T -
+  info "Archive created: $ARCHIVE ($(du -sh "$ARCHIVE" | cut -f1))"
+fi
+
+# ── Build commit message (base64-encoded for multi-line transport) ─────────────
+set +e
+COMMIT_MSG=$(build_commit_message "$ALL_FILES" "$DELETED_FILES")
+[[ -z "$COMMIT_MSG" ]] && COMMIT_MSG="chore: sync local changes"
+COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\n')
+[[ -z "$COMMIT_MSG_B64" ]] && COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | openssl base64 | tr -d '\n')
+info "Commit message:"
+printf '%s\n' "$COMMIT_MSG" | sed 's/^/  | /'
+set -e
+
+# ── Local commit（网络/远端失败，本地已留痕） ─────────────────────────────────
+info "Committing local changes ..."
+git -C "$PROJECT_ROOT" add -A
+if git -C "$PROJECT_ROOT" diff --cached --quiet; then
+  info "Nothing to commit locally."
+else
+  git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
+  info "Local commit done."
+fi
+
+# ── Upload archive ─────────────────────────────────────────────────────────────
+ARCHIVE_NAME="$(basename "$ARCHIVE")"
+if [[ "${SKIP_ARCHIVE}" -eq 0 ]]; then
+  info "Uploading to ${REMOTE_HOST}:${REMOTE_DIR} ..."
+  scp "$ARCHIVE" "${REMOTE_HOST}:${REMOTE_DIR}/"
+  info "Upload complete: ${REMOTE_HOST}:${REMOTE_DIR}/${ARCHIVE_NAME}"
+fi
+
+# ── Build remote delete commands ───────────────────────────────────────────────
+DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
+DELETED_LIST_B64=$(printf '%s' "$DELETED_LIST" | base64 | tr -d '\n')
+
+# ── Remote: pull → extract → commit → push ────────────────────────────────────
+info "Syncing remote ..."
+ssh "${REMOTE_HOST}" \
+  REMOTE_DIR="${REMOTE_DIR}" \
+  LOCAL_BRANCH="${LOCAL_BRANCH}" \
+  ARCHIVE_NAME="${ARCHIVE_NAME}" \
+  SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
+  DELETED_LIST_B64="${DELETED_LIST_B64}" \
+  COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
+  'bash -s' <<'REMOTE_SCRIPT' || true
+set -euo pipefail
+
+info()  { echo "[INFO]  $*"; }
+error() { echo "[ERROR] $*" >&2; }
+
+cd "${REMOTE_DIR}"
+
+REMOTE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+info "Remote branch: ${REMOTE_BRANCH}"
+if [[ "${REMOTE_BRANCH}" != "${LOCAL_BRANCH}" ]]; then
+  info "Switching to branch ${LOCAL_BRANCH} ..."
+  git fetch origin
+  git checkout "${LOCAL_BRANCH}" 2>/dev/null \
+    || git checkout -b "${LOCAL_BRANCH}" "origin/${LOCAL_BRANCH}"
+fi
+
+info "Pulling origin/${LOCAL_BRANCH} ..."
+git pull origin "${LOCAL_BRANCH}"
+
+if [[ "${SKIP_ARCHIVE}" -eq 0 && -f "${ARCHIVE_NAME}" ]]; then
+  info "Extracting ${ARCHIVE_NAME} ..."
+  tar xzf "${ARCHIVE_NAME}" --warning=no-unknown-keyword
+  rm -f "${ARCHIVE_NAME}"
+fi
+
+# Remove stale archives
+find "${REMOTE_DIR}" -maxdepth 1 -name '*.tar.gz' -delete
+
+# Remove files deleted locally
+DELETED_LIST=$(printf '%s' "${DELETED_LIST_B64:-}" | base64 -d 2>/dev/null || true)
+if [[ -n "${DELETED_LIST}" ]]; then
+  info "Removing locally-deleted files on remote ..."
+  IFS=':' read -ra del_files <<< "${DELETED_LIST}"
+  for f in "${del_files[@]}"; do
+    [[ -z "$f" ]] && continue
+    rm -f -- "${REMOTE_DIR}/${f}"
+    info "  Deleted: ${f}"
+  done
+fi
+
+git add -A
+if git diff --cached --quiet; then
+  info "Nothing to commit on remote."
+else
+  COMMIT_MSG=$(printf '%s' "${COMMIT_MSG_B64:-}" | base64 -d 2>/dev/null || true)
+  [[ -z "${COMMIT_MSG}" ]] && COMMIT_MSG="chore: sync local changes"
+  git commit -m "${COMMIT_MSG}"
+
+  MAX_RETRIES=3
+  RETRY=0
+  DELAY=2
+  until git push origin "${LOCAL_BRANCH}" 2>&1 | tee /tmp/push_output.txt; do
+    PUSH_OUTPUT=$(cat /tmp/push_output.txt)
+    if echo "${PUSH_OUTPUT}" | grep -qiE 'refusing|403|permission|scope|authentication|not allowed'; then
+      error "Push permanently rejected (auth/permission error). Aborting."
+      cat /tmp/push_output.txt
+      exit 1
+    fi
+    RETRY=$((RETRY + 1))
+    if [[ ${RETRY} -ge ${MAX_RETRIES} ]]; then
+      error "Push failed after ${MAX_RETRIES} retries. Giving up."
+      exit 1
+    fi
+    info "Push failed, retrying in ${DELAY}s (${RETRY}/${MAX_RETRIES}) ..."
+    sleep "${DELAY}"
+    DELAY=$((DELAY * 2))
+  done
+
+  if [[ ${RETRY} -eq 0 ]]; then
+    info "Push succeeded."
+  else
+    info "Push succeeded after ${RETRY} retry/retries."
+  fi
+fi
+
+info "Remote sync done."
+REMOTE_SCRIPT
+
+info "Remote sync complete."
+
+# ── Converge with origin ──────────────────────────────────────────────────────
+info "Converging local history with origin/${LOCAL_BRANCH} ..."
+if ! git -C "$PROJECT_ROOT" fetch origin "${LOCAL_BRANCH}" --quiet; then
+  warn "fetch origin failed; skip converge (local commit kept)."
+elif git -C "$PROJECT_ROOT" diff --quiet "origin/${LOCAL_BRANCH}" HEAD; then
+  git -C "$PROJECT_ROOT" reset --hard "origin/${LOCAL_BRANCH}" >/dev/null
+  info "Local branch now matches origin/${LOCAL_BRANCH} (adopted remote history)."
+else
+  if git -C "$PROJECT_ROOT" rebase "origin/${LOCAL_BRANCH}"; then
+    info "Rebased local commits onto origin/${LOCAL_BRANCH}."
+  else
+    git -C "$PROJECT_ROOT" rebase --abort || true
+    warn "origin 与本地内容不同且 rebase 冲突，保留本地提交，请人工处理。"
+  fi
+fi
+
+info "All done."

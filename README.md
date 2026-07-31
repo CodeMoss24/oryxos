@@ -4,35 +4,35 @@
 
 ![Java](https://img.shields.io/badge/Java-21-orange.svg)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen.svg)
-![Spring AI Alibaba](https://img.shields.io/badge/Spring%20AI%20Alibaba-LLM%20Provider-green.svg)
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![Status](https://img.shields.io/badge/Status-Core%20Phase%20WIP-yellow.svg)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 
-> **一个企业能完全掌控的、Java 原生的、私有可审计的 Agent 统一底座。**
+> **企业私有部署的 Agent 操作系统：你用一句自然语言发布一个任务 → 底座把它拆解 → 组织一支 Agent 团队 → 多个 Agent 分工协作 → 交付一个结果。** 让每一家公司，都能用自然语言跑起来自己的 Agent。
 
-OryxOS 装在企业自己的 K8s、服务器或物理机上,作为统一底座,在底座上跑各种业务 Agent(运维助手、客服助手、HR 助手、销售助手、知识管理助手等),共享一套渠道接入、模型路由、工具调用、记忆系统、沙箱执行能力。数据完全留在企业自己的基础设施,不锁任何云生态。
-
-- 🏗️ **统一**:多个业务 Agent 共享同一套底座,上新 Agent 只需放一个 Agent 目录
-- 🔒 **私有**:数据和部署完全在企业自己手里,OryxOS 不收集任何企业数据
-- 🔌 **易接入**:基于标准 Spring Boot 工程结构,跟现有 ERP/CRM/CMDB/SSO/监控系统直接对接
-- 📊 **可观测**:标准 Prometheus 指标、结构化 JSON 日志、健康检查接口
-
-> **当前状态**:核心阶段(运行时内核)开发中。企业级治理层(多租户、SSO、完整审计、Tool Policy)放扩展阶段。核心阶段是地基,不是终局。
+OryxOS 是开源的 **Agent Harness OS**（Agent 运行骨架）——套在模型外面、把模型变成能干活的 Agent 的那层脚手架。**北极星公式：自然语言(md) + Memory + Tool + MCP(Connector) + Skill + 知识库 + Notify = 一个 Agent。** 一个目录定义一个 Agent，一个底座运行一群 Agent，私有部署，数据不出域。覆盖模型接入、推理循环、记忆、工具调用、对外服务五大核心能力。
 
 ---
 
 ## 为什么需要 OryxOS
 
-业界开源 Agent OS 格局目前由 **OpenClaw**(Node.js,偏个人)和 **Hermes Agent**(Python,偏小团队)代表,合起来留下了三个空白:
+每家公司都有该交给 Agent 的活，但 Agent 大多还停在 demo，卡在四道门槛上：
 
-1. **完整的企业级治理**——多租户 RBAC、SSO、审计架构、合规留证
-2. **企业 IT 系统的深度集成**——ERP/CRM/CMDB/监控系统的现成 connector
-3. **Java 生态的缺位**——没有任何 Java 项目把 "Agent OS" 作为定位
+1. **定义一个 Agent 要写代码** — 最懂业务的人反而做不了
+2. **云平台要把数据拿走** — 合规过不去
+3. **执行是黑盒** — 没审计、没白名单、没人审批，企业不敢上生产
+4. **跑一个容易、跑一群难** — 没有人把「一群 Agent 的操作系统」这一层交给你
 
-严监管企业(银行、政府、电信、能源、医疗)的核心业务数据不能出企业、系统必须完全可审计、技术栈要跟现有体系对齐。OryxOS 锚定的就是这块**确定的、刚性的、当前无人满足的**需求——不管 "Agent OS" 这个词未来演变与否,"严监管企业要一个自己能完全掌控的 Agent 底座" 这件事都不会变。
+OryxOS 一次拆掉这四道门槛：自然语言定义、私有部署、全链路审计加沙箱、以及为一整队 Agent 准备的生命周期与治理。
 
-完整论证见 [`docs/IndustryResearch.md`](docs/IndustryResearch.md)。
+更深一层的判断是：**让 Agent 在生产环境可靠工作，瓶颈通常不在模型本身，而在 Agent 的运行环境。** OryxOS 做的不是又一个 Agent，而是这个让一群 Agent 可靠运行和协同的底座本身。
+
+---
+
+## Agent Harness OS
+
+Agent runtime 是让单个 Agent 跑起来的执行内核，负责调用模型、执行工具、管理上下文、控制推理循环。Agent Harness OS 在 runtime 之上，管理的是一群 Agent：多个 Agent 的生命周期、统一的对外渠道与对内接入、统一的记忆、多租户与治理，以及分布式形态下的跨节点协作。
+
+**runtime 让一个 Agent 跑起来，Agent Harness OS 让一群 Agent 被运行和管理起来。** OryxOS 是后者。
 
 ---
 
@@ -40,19 +40,15 @@ OryxOS 装在企业自己的 K8s、服务器或物理机上,作为统一底座,�
 
 ![OryxOS Architecture](docs/images/architecture.svg)
 
-OryxOS 是一个 Spring Boot 单体应用,对外有 **三个触发入口**:CLI(人推)、Web Service(人推)、`AgentScheduler` 定时任务(钟推)。三个入口的消息最终都汇入同一个 `AgentService`,由 **ReAct 循环** 驱动 **Provider / Memory / Tool** 三块能力。
-
-**五大核心能力**:
+OryxOS 是 Spring Boot 单体应用，三个触发入口（CLI / Web Service / AgentScheduler）汇入同一个 `AgentService`，由 **ReAct 循环** 驱动五大核心能力。
 
 | 能力 | 说明 |
 |------|------|
-| **对接 LLM** | Provider 抽象 + provider name → ChatModel 显式映射,Agent 不感知具体调哪家模型 |
-| **ReAct 循环** | Agent 大脑,自实现约数十行 Java,LLM 思考 + 工具执行,多步骤任务自主完成 |
-| **Memory 三层记忆** | `MemoryService` 统一门面,核心阶段会话 + 长期(`MEMORY.md`),跨对话记住偏好 |
-| **Plugin Tool + 内置工具集** | 9 个内置 Tool + Plugin 三档(零代码 `AGENT.md`+MCP / 轻代码自写 MCP / 重代码 `@Tool` Bean) |
-| **Web Service** | REST API 暴露所有能力,业务系统集成的唯一通道 |
-
-详见 [`docs/TechnicalSolution.md`](docs/TechnicalSolution.md)。
+| **对接 LLM** | Provider 抽象 + 显式映射，Agent 不感知具体厂商，运行时切换不锁定 |
+| **ReAct 循环** | Agent 大脑，自实现约数十行 Java，虚拟线程高并发，机制完全可控 |
+| **Memory 记忆** | MemoryService 统一门面，核心区全量注入 + 归档区关键词检索，三档后端可切换 |
+| **Tool 工具** | 9 个内置 Tool + Plugin 三档接入（零代码 MCP / 自写 MCP / @Tool Java Bean） |
+| **Web Service** | 10 个 REST 端点，所有能力通过 HTTP API 暴露，任何语言可集成 |
 
 ---
 
@@ -62,62 +58,41 @@ OryxOS 是一个 Spring Boot 单体应用,对外有 **三个触发入口**:CLI(�
 
 - **JDK 21+**
 - **Maven 3.9+**
-- **Linux 主流发行版**(Ubuntu 22.04+ / CentOS 8+ / Debian 11+ / Alibaba Cloud Linux 3 / Rocky Linux)
-- 至少一个 LLM Provider 的 API key(推荐 DeepSeek 或 Kimi)
+- Linux 主流发行版（Ubuntu 22.04+ / CentOS 8+ / Debian 11+）
 
-### 安装与构建
+### 安装
 
 ```bash
-git clone <repo-url> oryxos
+git clone git@github.com:CodeMoss24/oryxos.git
 cd oryxos
 mvn clean package
 ```
 
-生成 fat JAR,`java -jar oryxos-boot/target/oryxos-boot-*.jar` 启动。
-
-### 初始化工作区
+### 初始化
 
 ```bash
 oryxos init
 ```
 
-在当前目录下创建 `.oryxos/` 工作区:
+创建 `.oryxos/` 工作区：
 
 ```
 .oryxos/
-├── agents/            # 每个子目录 = 一个 Agent(AGENT.md + 可选 skills/ scripts/ REFERENCE.md)
-├── skills/            # 全局 Skill 库,Agent 按名引用
+├── agents/            # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/scripts/）
+├── skills/            # 全局 Skill 库
 ├── output/            # Agent 产出物
 ├── memory/
-│   └── MEMORY.md      # 长期记忆(## 核心记忆 / ## 归档记忆)
+│   └── MEMORY.md      # 长期记忆（## 核心记忆 / ## 归档记忆）
 ├── sessions/          # 会话历史
 ├── logs/              # 结构化日志
 ├── mcp_servers.yaml   # MCP 配置
-├── AGENTS.md          # Bootstrap:项目级 agent 行为说明
-├── SOUL.md            # Bootstrap:默认 agent 人格定义
-├── USER.md            # Bootstrap:用户偏好
+├── AGENTS.md          # Bootstrap：项目级 agent 行为说明
+├── SOUL.md            # Bootstrap：默认 agent 人格
+├── USER.md            # Bootstrap：用户偏好
 └── oryxos.db          # SQLite
 ```
 
-### 配置 Provider
-
-编辑 `application.yaml`,通过环境变量注入 API key(不明文写死):
-
-```yaml
-oryxos:
-  providers:
-    - name: deepseek
-      model: deepseek-chat
-      api-key: ${DEEPSEEK_API_KEY}
-```
-
-```bash
-export DEEPSEEK_API_KEY=sk-xxxxx
-```
-
-### 定义一个 Agent
-
-一个目录 = 一个 Agent。`oryxos profile create daily-weather` 生成最小模板,编辑 `.oryxos/agents/daily-weather/AGENT.md`:
+### 定义第一个 Agent
 
 ```yaml
 ---
@@ -136,105 +111,67 @@ notify_channels:
 schedules:
   - cron: "0 0 8 * * ?"
     zone: Asia/Shanghai
-    message: 查北京今天的天气并给我穿搭建议,推送出来
+    message: 查北京今天的天气并给我穿搭建议，推送出来
 ---
 
-查天气,生成穿搭建议,通过 notify 推送。
+查天气，生成穿搭建议，通过 notify 推送。
 ```
 
 ### 三种运行模式
 
 ```bash
-# 交互对话(开发调试)
-oryxos chat --profile daily-weather
-
-# 启动 REST API 服务(默认 8080)
-oryxos serve
-
-# 多渠道守护进程(同时挂多个 Channel)
-oryxos gateway
-```
-
-### 业务系统集成示例
-
-```bash
-# 创建会话
-curl -X POST http://localhost:8080/api/v1/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"profile_name":"daily-weather","user_id":"alice"}'
-
-# 发消息
-curl -X POST http://localhost:8080/api/v1/sessions/{id}/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content":"今天北京天气如何?"}'
-
-# 查历史
-curl http://localhost:8080/api/v1/sessions/{id}
+oryxos chat --profile daily-weather   # 交互对话（开发调试）
+oryxos serve                           # 启动 REST API（默认 8080）
+oryxos gateway                         # 多渠道守护进程
 ```
 
 ---
 
-## 模块说明
+## 模块结构
 
-OryxOS 是 Maven 多模块项目,由 9 个模块组成:
+OryxOS 是 Maven 多模块项目，9 个模块：
 
 | 模块 | 职责 |
 |------|------|
-| [`oryxos-core`](oryxos-core) | 核心抽象:`OryxTool` 接口、`Session`、`Profile`、`ContextLoader`、`AgentLoader`(扫 `.oryxos/agents/`、`deriveProfile`)、`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`AgentScheduler` |
-| [`oryxos-provider`](oryxos-provider) | `ProviderService`、Function Calling 适配、provider name → `ChatModel` 显式映射 |
-| [`oryxos-memory`](oryxos-memory) | `MemoryService` 统一门面、`LongTermMemory`(三档后端:Markdown/SQLite/Mem0)、`MemoryTools` |
-| [`oryxos-tool`](oryxos-tool) | 内置 Tool(`FileTools`/`ShellTools`/`HttpTools`/`MemoryTools`/`NotifyTools`)、`McpClientService`、`McpToolAdapter`、`ToolRegistry`、`Sandbox` + `WhitelistSandbox`、`NotifyChannelAdapter` + `WebhookNotifyAdapter` |
-| [`oryxos-channel-cli`](oryxos-channel-cli) | `CliChannel`、`oryxos chat` 实现 |
-| [`oryxos-web`](oryxos-web) | `WebServer`、6 个 `ApiController`、`GlobalExceptionHandler`、OpenAPI 文档 |
-| [`oryxos-storage`](oryxos-storage) | SQLite 持久化层、各 Repository |
-| [`oryxos-cli`](oryxos-cli) | Picocli 主入口、12 个子命令、`ConfigLoader` |
-| [`oryxos-boot`](oryxos-boot) | Spring Boot 启动模块、主类、自动配置、依赖聚合 |
-
-模块之间通过接口解耦。扩展阶段加新 Channel 或新 Tool 实现只加新模块不改 core。
+| `oryxos-core` | 核心抽象：`OryxTool`、`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`AgentScheduler` |
+| `oryxos-provider` | ProviderService、Function Calling 适配、显式映射 |
+| `oryxos-memory` | MemoryService 统一门面、三档后端（Markdown/SQLite/Mem0）、MemoryTools |
+| `oryxos-tool` | 内置 Tool、MCP Client、ToolRegistry、Sandbox、NotifyChannelAdapter |
+| `oryxos-channel-cli` | CliChannel、`oryxos chat` |
+| `oryxos-web` | WebServer、6 个 ApiController、GlobalExceptionHandler |
+| `oryxos-storage` | SQLite 持久化、各 Repository |
+| `oryxos-cli` | Picocli 主入口、12 个子命令 |
+| `oryxos-boot` | Spring Boot 启动模块 |
 
 ---
 
-## 定义一个 Agent:三种丰富度
+## 设计原则
 
-OryxOS 借 Anthropic Agent Skills 的目录形态,但在 OryxOS **一个目录 = 一个 Agent**。`AGENT.md` 的 frontmatter 派生 Profile,正文注入 system prompt,目录里的子指令/脚本/参考按需经 `read_file`/`shell` 取用(渐进式披露)。
-
-| 形态 | 示例 | 适合场景 |
-|------|------|---------|
-| 光杆 `AGENT.md` | 每日天气 | 简单任务,只用内置 Tool |
-| `AGENT.md` + `skills/` 子指令 | 每日科技日报 | 较长的组稿规范、产出格式约束 |
-| `AGENT.md` + `scripts/` 脚本 | 每日 GitHub 日报 | 需要确定性数据,Agent 跑脚本拿 JSON |
-
-业务方全程不写 Java 代码,只写 markdown 目录 + 复用社区 MCP server,就能上线一个新场景。
+- **底座优先于 Agent** — 最重要的交付不是某个强大的 Agent，而是让任意 Agent 都能可靠运行的环境
+- **自实现核心，可控优先** — 核心推理循环自己实现，底层模型协议适配复用成熟库，不重复造轮子
+- **配置即 Agent** — 一个 Agent 由一份配置定义，而不是由代码写出
+- **对接开放标准** — 工具用 MCP、协作用 A2A、技能用开放格式，与生态协同
+- **无状态实例，状态外置** — 从单机平滑走向分布式的前提
+- **安全是地基不是补丁** — 工具来源受控、最小权限、强制沙箱、凭证不落地、全链路可审计，安全从第一天就在架构里
+- **分阶段克制** — 当前只做运行时内核的最小完备集，治理与重型分布式基础设施留到后续，每次架构升级都用真实使用数据证明其必要性
 
 ---
 
 ## 路线图
 
-### 核心阶段(进行中)
+我们的开发理念是：**慢就是快，克制且聚焦。** 先把单机的运行时内核做扎实，让一个节点上运行和管理一群 Agent 这件事真正可用、有人用，再在它之上逐步生长出分布式能力。
 
-4 周 × 3 小时 = 12 小时,按 user story 依赖推进:
-
-```
-US-1 (Provider) → US-2 (ReAct) → ┌─ US-3 (Memory) ─┐ → US-5 (Web Service)
-                                  └─ US-4 (Tool)    ─┘
-```
-
-第四周末跑通三个验收 Demo:每日天气 / 每日科技日报 / 每日 GitHub 日报。
-
-### 扩展阶段
-
-- 多 Channel 接入(企业微信、飞书、钉钉、Slack、邮件)
-- Provider Fallback 与 Adaptive Routing
-- Memory 自动抽取 + 语义检索(向量库)
-- Tool Policy + 完整 Sandbox(容器/microVM)
-- Web 仪表板、SSO、多租户、完整审计
-- 集群化部署与高可用(Nacos / ETCD)
-
-### 社区共建
-
-Skills Marketplace、SDK 多语言支持(Java → Python → TypeScript → Go)、可视化 Profile 编辑器、Native 文件生成、Kubernetes Operator、移动端管理台、Voice Channel、RISC-V/边缘部署。
-
-详见 [`docs/DemandAnalysis.md`](docs/DemandAnalysis.md) 第 6、7 章。
+- **阶段一（当前）单机运行时内核**
+  - 五大核心能力跑通：配置即 Agent、多 Agent 并存、REST API 接入、对接 MCP
+  - 把单节点运行和管理一群 Agent 做到可用
+- **阶段二（规划）底座分布式**
+  - 节点无状态化、状态外置、多副本部署
+  - 支撑更大规模与高可用
+- **阶段三（愿景）跨节点 Agent 协作**
+  - 引入 Agent 通信底座，对接 A2A
+  - 让多节点上的 Agent 跨节点发现、委托、可靠异步协同
+- **横向能力（伴随各阶段逐步补齐）**
+  - 多租户、SSO、完整审计、工具策略、可观测、Web 管理
 
 ---
 
@@ -242,31 +179,24 @@ Skills Marketplace、SDK 多语言支持(Java → Python → TypeScript → Go)�
 
 | 文档 | 内容 |
 |------|------|
-| [`docs/IndustryResearch.md`](docs/IndustryResearch.md) | 业界格局、Java 生态缺位、OryxOS 定位 |
-| [`docs/DemandAnalysis.md`](docs/DemandAnalysis.md) | 需求文档(What) |
-| [`docs/TechnicalSolution.md`](docs/TechnicalSolution.md) | 技术方案(How,权威) |
-| [`docs/AiProgrammingGuide.md`](docs/AiProgrammingGuide.md) | AI 编程实施指引(Spec-Kit + 手动提示词) |
-| [`CLAUDE.md`](CLAUDE.md) | AI agent 工作指引(constitution + 模块 + 陷阱) |
+| [`docs/oryxos.md`](docs/oryxos.md) | 项目总览 |
+| [`docs/IndustryResearch.md`](docs/IndustryResearch.md) | 业界格局与定位 |
+| [`docs/DemandAnalysis.md`](docs/DemandAnalysis.md) | 需求文档 |
+| [`docs/TechnicalSolution.md`](docs/TechnicalSolution.md) | 技术方案（权威） |
+| [`docs/AiProgrammingGuide.md`](docs/AiProgrammingGuide.md) | AI 编程实施指引 |
+| [`CLAUDE.md`](CLAUDE.md) | AI Agent 工作指引 |
 
 ---
 
-## 贡献
+## 项目信息
 
-欢迎通过 PR 贡献代码。请先阅读:
-
-- [`CLAUDE.md`](CLAUDE.md) — 不可违背原则与常见陷阱
-- [`docs/AiProgrammingGuide.md`](docs/AiProgrammingGuide.md) — 主体开发用 Spec-Kit,增量开发用 Claude Code
-
-**核心阶段**优先推进五大核心能力;**扩展阶段**的治理层、企业 IT 系统 connector、多 Channel 等开放给社区共建。
-
-提交前请确保:
-- 遵守 JDK 21 + Spring Boot 3.x 技术栈
-- 不启用 Spring AI 的自动 tool 执行(详见 constitution 原则四)
-- 审计表(`tool_invocations` / `llm_calls`)写入 SQLite,不只放日志
-- 每个 user story 完成后有可演示 Demo
+- **语言**：Java（JDK 21）
+- **协议**：Apache 2.0
+- **生态**：oryx-labs
+- **长期目标**：走进 Apache 基金会，努力成为 Apache 顶级项目
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

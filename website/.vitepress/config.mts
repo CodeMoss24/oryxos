@@ -2,30 +2,31 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'OryxOS',
-  titleTemplate: ':title — OryxOS',
-  description: 'Java 原生、私有可审计的 Agent OS — 为严监管企业设计，数据不出企业。',
+  titleTemplate: ':title — Agent Harness OS',
+  description: '开源的 Agent Harness OS — Java 原生、私有可审计。一个目录定义一个 Agent，一个底座运行一群 Agent。',
   base: '/',
   cleanUrls: true,
-  appearance: 'force-light',
+  appearance: 'force-dark',
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
-    ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap' }],
+    ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap' }],
     ['meta', { name: 'author', content: 'OryxOS' }],
-    ['meta', { name: 'keywords', content: 'OryxOS, Agent OS, AI Agent, Java, Spring Boot, private deployment, audit, regulated enterprise, ReAct, MCP, multi-agent' }],
+    ['meta', { name: 'keywords', content: 'OryxOS, Agent Harness OS, Agent OS, AI Agent, Java, Spring Boot, private deployment, audit, regulated enterprise, ReAct, MCP, A2A, multi-agent' }],
     ['meta', { name: 'robots', content: 'index, follow' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'OryxOS' }],
-    ['meta', { property: 'og:title', content: 'OryxOS — Java-native Private Agent OS' }],
-    ['meta', { property: 'og:description', content: 'Java 原生、私有可审计的 Agent OS — 为严监管企业设计，数据不出企业。' }],
+    ['meta', { property: 'og:title', content: 'OryxOS — Agent Harness OS' }],
+    ['meta', { property: 'og:description', content: '开源的 Agent Harness OS — Java 原生、私有可审计。一个目录定义一个 Agent，一个底座运行一群 Agent。' }],
   ],
 
   locales: {
     root: {
       label: '中文',
       lang: 'zh-CN',
+      link: '/',
       themeConfig: {
         nav: [
           { text: '首页', link: '/' },

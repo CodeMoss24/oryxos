@@ -18,8 +18,7 @@ Thumbs.db
 
 # Node
 website/node_modules/
-website/.vitepress/dist/
-website/.vitepress/cache/
+website/.vitepress/
 
 # OryxOS runtime
 .oryxos/
