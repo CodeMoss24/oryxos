@@ -18,7 +18,7 @@ REMOTE_DIR="/home/ubuntu/oryxos"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="${1:-$PROJECT_ROOT}"
+OUTPUT_DIR="${1:-/tmp}"
 
 # ── Logging helpers ────────────────────────────────────────────────────────────
 info()  { echo "[INFO]  $*"; }

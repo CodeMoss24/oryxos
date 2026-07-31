@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'OryxOS',
   titleTemplate: ':title — Agent Harness OS',
   description: '开源的 Agent Harness OS — Java 原生、私有可审计。一个目录定义一个 Agent，一个底座运行一群 Agent。',
-  base: '/',
+  base: '/oryxos/',
   cleanUrls: true,
   appearance: 'force-dark',
 

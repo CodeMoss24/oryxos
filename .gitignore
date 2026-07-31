@@ -1,3 +1,6 @@
+# Archive
+*.tar.gz
+
 # Java
 target/
 *.class
