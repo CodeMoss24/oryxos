@@ -1,0 +1,6 @@
+#!/bin/bash
+echo "Running pre-commit checks..."
+mvn spotless:check -q || {
+    echo "Spotless 格式检查失败，请执行 mvn spotless:apply 自动修复"
+    exit 1
+}

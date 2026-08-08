@@ -8,8 +8,8 @@ import picocli.CommandLine;
 @Configuration
 public class PicocliConfig {
 
-    @Bean
-    public CommandLine commandLine(OryxOsCli command) {
-        return new CommandLine(command);
-    }
+  @Bean
+  public CommandLine commandLine(OryxOsCli command) {
+    return new CommandLine(command);
+  }
 }

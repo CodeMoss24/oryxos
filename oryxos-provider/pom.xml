@@ -15,9 +15,14 @@
     <description>核心能力一:LLM Provider 抽象 + provider name → ChatModel 显式映射</description>
 
     <dependencies>
+        <!-- Module dependencies -->
         <dependency>
             <groupId>com.oryxos</groupId>
             <artifactId>oryxos-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.oryxos</groupId>
+            <artifactId>oryxos-storage</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

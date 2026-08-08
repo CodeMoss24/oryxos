@@ -4,70 +4,132 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-
 import java.time.Instant;
 
-/**
- * scheduled_tasks 表:定时任务登记与状态。第 28 节补齐。
- */
+/** scheduled_tasks 表:定时任务登记与状态。第 28 节补齐。 */
 @Entity
 @Table(name = "scheduled_tasks")
 public class ScheduledTaskEntity {
 
-    @Id
-    @Column(name = "task_id")
-    private String taskId;
+  @Id
+  @Column(name = "task_id")
+  private String taskId;
 
-    @Column(name = "profile_name")
-    private String profileName;
+  @Column(name = "profile_name")
+  private String profileName;
 
-    @Column(name = "cron")
-    private String cron;
+  @Column(name = "cron")
+  private String cron;
 
-    @Column(name = "zone")
-    private String zone;
+  @Column(name = "zone")
+  private String zone;
 
-    @Column(name = "message")
-    private String message;
+  @Column(name = "message")
+  private String message;
 
-    @Column(name = "enabled")
-    private Boolean enabled;
+  @Column(name = "enabled")
+  private Boolean enabled;
 
-    @Column(name = "next_run_at")
-    private Instant nextRunAt;
+  @Column(name = "next_run_at")
+  private Instant nextRunAt;
 
-    @Column(name = "last_run_at")
-    private Instant lastRunAt;
+  @Column(name = "last_run_at")
+  private Instant lastRunAt;
 
-    @Column(name = "last_status")
-    private String lastStatus;
+  @Column(name = "last_status")
+  private String lastStatus;
 
-    @Column(name = "run_count")
-    private Long runCount;
+  @Column(name = "run_count")
+  private Long runCount;
 
-    @Column(name = "updated_at")
-    private Instant updatedAt;
+  @Column(name = "updated_at")
+  private Instant updatedAt;
 
-    public String getTaskId() { return taskId; }
-    public void setTaskId(String taskId) { this.taskId = taskId; }
-    public String getProfileName() { return profileName; }
-    public void setProfileName(String profileName) { this.profileName = profileName; }
-    public String getCron() { return cron; }
-    public void setCron(String cron) { this.cron = cron; }
-    public String getZone() { return zone; }
-    public void setZone(String zone) { this.zone = zone; }
-    public String getMessage() { return message; }
-    public void setMessage(String message) { this.message = message; }
-    public Boolean getEnabled() { return enabled; }
-    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
-    public Instant getNextRunAt() { return nextRunAt; }
-    public void setNextRunAt(Instant nextRunAt) { this.nextRunAt = nextRunAt; }
-    public Instant getLastRunAt() { return lastRunAt; }
-    public void setLastRunAt(Instant lastRunAt) { this.lastRunAt = lastRunAt; }
-    public String getLastStatus() { return lastStatus; }
-    public void setLastStatus(String lastStatus) { this.lastStatus = lastStatus; }
-    public Long getRunCount() { return runCount; }
-    public void setRunCount(Long runCount) { this.runCount = runCount; }
-    public Instant getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+  public String getTaskId() {
+    return taskId;
+  }
+
+  public void setTaskId(String taskId) {
+    this.taskId = taskId;
+  }
+
+  public String getProfileName() {
+    return profileName;
+  }
+
+  public void setProfileName(String profileName) {
+    this.profileName = profileName;
+  }
+
+  public String getCron() {
+    return cron;
+  }
+
+  public void setCron(String cron) {
+    this.cron = cron;
+  }
+
+  public String getZone() {
+    return zone;
+  }
+
+  public void setZone(String zone) {
+    this.zone = zone;
+  }
+
+  public String getMessage() {
+    return message;
+  }
+
+  public void setMessage(String message) {
+    this.message = message;
+  }
+
+  public Boolean getEnabled() {
+    return enabled;
+  }
+
+  public void setEnabled(Boolean enabled) {
+    this.enabled = enabled;
+  }
+
+  public Instant getNextRunAt() {
+    return nextRunAt;
+  }
+
+  public void setNextRunAt(Instant nextRunAt) {
+    this.nextRunAt = nextRunAt;
+  }
+
+  public Instant getLastRunAt() {
+    return lastRunAt;
+  }
+
+  public void setLastRunAt(Instant lastRunAt) {
+    this.lastRunAt = lastRunAt;
+  }
+
+  public String getLastStatus() {
+    return lastStatus;
+  }
+
+  public void setLastStatus(String lastStatus) {
+    this.lastStatus = lastStatus;
+  }
+
+  public Long getRunCount() {
+    return runCount;
+  }
+
+  public void setRunCount(Long runCount) {
+    this.runCount = runCount;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  public void setUpdatedAt(Instant updatedAt) {
+    this.updatedAt = updatedAt;
+  }
 }

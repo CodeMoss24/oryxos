@@ -23,6 +23,13 @@ spring:
 
 oryxos:
   workspace: .oryxos
+  providers:
+    - name: deepseek
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com
+    - name: kimi
+      api-key: ${KIMI_API_KEY:}
+      base-url: https://api.moonshot.cn
   memory:
     backend: markdown
   sandbox:
@@ -36,3 +43,16 @@ oryxos:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: oryxos
