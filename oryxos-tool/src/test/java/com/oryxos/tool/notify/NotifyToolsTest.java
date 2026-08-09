@@ -63,30 +63,29 @@ class NotifyToolsTest {
   @Test
   @DisplayName("channel 参数缺省时取第一个渠道")
   void usesFirstChannelWhenChannelParamOmitted() {
-    Profile.NotifyChannel chA = new Profile.NotifyChannel("webhook-a", Map.of("url", "https://a.example.com"));
-    Profile.NotifyChannel chB = new Profile.NotifyChannel("webhook-b", Map.of("url", "https://b.example.com"));
+    Profile.NotifyChannel chA =
+        new Profile.NotifyChannel("webhook-a", Map.of("url", "https://a.example.com"));
+    Profile.NotifyChannel chB =
+        new Profile.NotifyChannel("webhook-b", Map.of("url", "https://b.example.com"));
     ProfileContext.set(profileWithChannels(chA, chB));
 
     notifyTools.execute("{\"content\":\"hi\"}");
 
     org.mockito.Mockito.verify(adapter)
-        .send(
-            argThat(t -> t.channelType().equals("webhook-a")),
-            eq("hi"));
+        .send(argThat(t -> t.channelType().equals("webhook-a")), eq("hi"));
   }
 
   @Test
   @DisplayName("发送前必须先过白名单校验——InOrder 钉死顺序，顺序反了就是漏洞")
   void enforceBeforeSendOrderVerifiedWithInOrder() {
-    Profile.NotifyChannel ch = new Profile.NotifyChannel("webhook", Map.of("url", "https://example.com/webhook"));
+    Profile.NotifyChannel ch =
+        new Profile.NotifyChannel("webhook", Map.of("url", "https://example.com/webhook"));
     ProfileContext.set(profileWithChannels(ch));
 
     notifyTools.execute("{\"content\":\"hello\"}");
 
     InOrder inOrder = inOrder(sandbox, adapter);
-    inOrder.verify(sandbox)
-        .enforce(
-            argThat(a -> a.type() == Sandbox.ActionType.HTTP_REQUEST));
+    inOrder.verify(sandbox).enforce(argThat(a -> a.type() == Sandbox.ActionType.HTTP_REQUEST));
     inOrder.verify(adapter).send(any(), eq("hello"));
   }
 }

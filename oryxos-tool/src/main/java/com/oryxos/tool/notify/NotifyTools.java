@@ -50,8 +50,7 @@ public class NotifyTools implements OryxTool {
       if (!channel.isBlank() && !channel.equals(nc.type())) continue;
       try {
         sandbox.enforce(
-            new Sandbox.SandboxAction(
-                Sandbox.ActionType.HTTP_REQUEST, nc.config().get("url")));
+            new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, nc.config().get("url")));
         adapter.send(new NotifyChannelAdapter.NotifyTarget(nc.type(), nc.config()), content);
         return ToolResult.success("notified");
       } catch (Exception e) {
