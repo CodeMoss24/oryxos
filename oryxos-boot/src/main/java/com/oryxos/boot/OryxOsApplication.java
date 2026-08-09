@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import picocli.CommandLine;
+import picocli.spring.boot.autoconfigure.PicocliAutoConfiguration;
 
 /**
  * OryxOS Spring Boot 启动模块。
@@ -22,7 +23,9 @@ import picocli.CommandLine;
  * <p>轻命令集:init / status / profile / provider / tool / session 以及无参数(打印 usage)。 重命令集:chat / serve /
  * gateway。
  */
-@SpringBootApplication(scanBasePackages = "com.oryxos")
+@SpringBootApplication(
+    scanBasePackages = "com.oryxos",
+    exclude = PicocliAutoConfiguration.class)
 @EnableJpaRepositories(basePackages = "com.oryxos.storage.repository")
 @EntityScan(basePackages = "com.oryxos.storage.entity")
 public class OryxOsApplication implements CommandLineRunner {

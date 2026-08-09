@@ -3,7 +3,7 @@ package com.oryxos.cli;
 import picocli.CommandLine.Command;
 
 /** oryxos serve — 启动 HTTP API 服务(由 Spring Boot 主类承接)。 */
-@Command(name = "serve", description = "启动 HTTP API 服务")
+@Command(name = "serve", description = "启动 HTTP API 服务", mixinStandardHelpOptions = true)
 public class ServeCommand implements Runnable {
   @Override
   public void run() {

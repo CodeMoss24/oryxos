@@ -2,7 +2,7 @@ package com.oryxos.cli;
 
 import picocli.CommandLine.Command;
 
-@Command(name = "gateway", description = "启动多渠道守护进程")
+@Command(name = "gateway", description = "启动多渠道守护进程", mixinStandardHelpOptions = true)
 public class GatewayCommand implements Runnable {
   @Override
   public void run() {

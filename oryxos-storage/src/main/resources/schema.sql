@@ -23,3 +23,15 @@ CREATE TABLE IF NOT EXISTS tool_invocations (
     duration_ms BIGINT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    profile_name TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    messages_json TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    last_active_at TEXT NOT NULL,
+    archived_at TEXT
+);

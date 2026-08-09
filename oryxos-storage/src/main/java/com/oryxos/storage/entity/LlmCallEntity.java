@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.oryxos.storage.config.InstantStringConverter;
+import jakarta.persistence.Convert;
 import java.time.Instant;
 
 /** llm_calls 表:每次 LLM 调用记录。day one 写入(审计地基)。 */
@@ -44,6 +46,7 @@ public class LlmCallEntity {
   @Column(name = "error_message")
   private String errorMessage;
 
+  @Convert(converter = InstantStringConverter.class)
   @Column(name = "created_at")
   private Instant createdAt;
 

@@ -2,7 +2,7 @@ package com.oryxos.cli;
 
 import picocli.CommandLine.Command;
 
-@Command(name = "status", description = "查看 OryxOS 配置和运行状态")
+@Command(name = "status", description = "查看 OryxOS 配置和运行状态", mixinStandardHelpOptions = true)
 public class StatusCommand implements Runnable {
   @Override
   public void run() {

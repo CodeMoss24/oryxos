@@ -9,7 +9,7 @@ import picocli.CommandLine.Option;
  * oryxos init — 初始化工作区。 创建 .oryxos/ 目录及完整结构(agents/ skills/ output/ memory/ sessions/ logs/ +
  * AGENTS.md SOUL.md USER.md Bootstrap 文件)。 幂等:已存在的目录和文件一律不覆盖。
  */
-@Command(name = "init", description = "初始化 OryxOS 工作区(.oryxos/)")
+@Command(name = "init", description = "初始化 OryxOS 工作区(.oryxos/)", mixinStandardHelpOptions = true)
 public class InitCommand implements Runnable {
 
   @Option(

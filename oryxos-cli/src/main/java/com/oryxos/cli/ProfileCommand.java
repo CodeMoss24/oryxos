@@ -22,7 +22,7 @@ public class ProfileCommand implements Runnable {
     System.out.println("Usage: oryxos profile [list|create|show|delete]");
   }
 
-  @Command(name = "list", description = "列出所有 Profile")
+  @Command(name = "list", description = "列出所有 Profile", mixinStandardHelpOptions = true)
   static class List implements Runnable {
     @Override
     public void run() {
@@ -41,7 +41,7 @@ public class ProfileCommand implements Runnable {
     }
   }
 
-  @Command(name = "create", description = "创建新 Profile(生成最小 AGENT.md 模板)")
+  @Command(name = "create", description = "创建新 Profile(生成最小 AGENT.md 模板)", mixinStandardHelpOptions = true)
   static class Create implements Runnable {
     @picocli.CommandLine.Parameters(index = "0")
     String name;
@@ -79,7 +79,7 @@ public class ProfileCommand implements Runnable {
     }
   }
 
-  @Command(name = "show", description = "查看 Profile 详情")
+  @Command(name = "show", description = "查看 Profile 详情", mixinStandardHelpOptions = true)
   static class Show implements Runnable {
     @picocli.CommandLine.Parameters(index = "0")
     String name;
@@ -99,7 +99,7 @@ public class ProfileCommand implements Runnable {
     }
   }
 
-  @Command(name = "delete", description = "删除 Profile(整个目录)")
+  @Command(name = "delete", description = "删除 Profile(整个目录)", mixinStandardHelpOptions = true)
   static class Delete implements Runnable {
     @picocli.CommandLine.Parameters(index = "0")
     String name;

@@ -1,6 +1,8 @@
 package com.oryxos.storage.entity;
 
+import com.oryxos.storage.config.InstantStringConverter;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -30,12 +32,15 @@ public class SessionEntity {
   @Column(name = "status")
   private String status;
 
+  @Convert(converter = InstantStringConverter.class)
   @Column(name = "created_at")
   private Instant createdAt;
 
+  @Convert(converter = InstantStringConverter.class)
   @Column(name = "last_active_at")
   private Instant lastActiveAt;
 
+  @Convert(converter = InstantStringConverter.class)
   @Column(name = "archived_at")
   private Instant archivedAt;
 

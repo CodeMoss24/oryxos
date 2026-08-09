@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import com.oryxos.storage.config.InstantStringConverter;
+import jakarta.persistence.Convert;
 import java.time.Instant;
 
 /** tool_invocations 表:每次 Tool 调用记录。day one 写入(审计地基)。 */
@@ -38,6 +40,7 @@ public class ToolInvocationEntity {
   @Column(name = "duration_ms")
   private Long durationMs;
 
+  @Convert(converter = InstantStringConverter.class)
   @Column(name = "created_at")
   private Instant createdAt;
 
