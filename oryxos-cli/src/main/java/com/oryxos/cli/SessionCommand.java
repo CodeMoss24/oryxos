@@ -22,9 +22,10 @@ public class SessionCommand implements Runnable {
     String url = "jdbc:sqlite:" + db;
     try (Connection conn = DriverManager.getConnection(url);
         Statement stmt = conn.createStatement();
-        ResultSet rs = stmt.executeQuery(
-            "SELECT session_id, profile_name, channel, user_id, last_active_at FROM sessions "
-                + "ORDER BY last_active_at DESC")) {
+        ResultSet rs =
+            stmt.executeQuery(
+                "SELECT session_id, profile_name, channel, user_id, last_active_at FROM sessions "
+                    + "ORDER BY last_active_at DESC")) {
       boolean any = false;
       while (rs.next()) {
         any = true;

@@ -23,9 +23,7 @@ import picocli.spring.boot.autoconfigure.PicocliAutoConfiguration;
  * <p>轻命令集:init / status / profile / provider / tool / session 以及无参数(打印 usage)。 重命令集:chat / serve /
  * gateway。
  */
-@SpringBootApplication(
-    scanBasePackages = "com.oryxos",
-    exclude = PicocliAutoConfiguration.class)
+@SpringBootApplication(scanBasePackages = "com.oryxos", exclude = PicocliAutoConfiguration.class)
 @EnableJpaRepositories(basePackages = "com.oryxos.storage.repository")
 @EntityScan(basePackages = "com.oryxos.storage.entity")
 public class OryxOsApplication implements CommandLineRunner {

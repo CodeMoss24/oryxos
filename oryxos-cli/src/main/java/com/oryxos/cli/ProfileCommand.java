@@ -41,7 +41,10 @@ public class ProfileCommand implements Runnable {
     }
   }
 
-  @Command(name = "create", description = "创建新 Profile(生成最小 AGENT.md 模板)", mixinStandardHelpOptions = true)
+  @Command(
+      name = "create",
+      description = "创建新 Profile(生成最小 AGENT.md 模板)",
+      mixinStandardHelpOptions = true)
   static class Create implements Runnable {
     @picocli.CommandLine.Parameters(index = "0")
     String name;

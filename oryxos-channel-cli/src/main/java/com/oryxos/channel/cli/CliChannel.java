@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
  * CLI Channel 实现。oryxos chat 命令的执行体, 读 stdin 写 stdout 实现交互式对话,维护当前 Session,每次输入调
  * AgentService.process。
  *
- * <p>Session 标识只提供三元组(channel=cli + 本机用户 + profile),id 拼接由 SessionManager 完成;
- * getOrCreate 幂等——同一三元组历次进入同一个 Session,历史自动带回。
+ * <p>Session 标识只提供三元组(channel=cli + 本机用户 + profile),id 拼接由 SessionManager 完成; getOrCreate
+ * 幂等——同一三元组历次进入同一个 Session,历史自动带回。
  *
  * <p>支持 /quit 退出。
  */
