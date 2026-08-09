@@ -1,15 +1,20 @@
 package com.oryxos.tool.builtin;
 
-import com.oryxos.core.tool.OryxTool;
-import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.sandbox.Sandbox;
-import com.oryxos.tool.sandbox.SandboxViolationException;
 import java.io.IOException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import org.springframework.stereotype.Component;
 
-/** 文件操作内置 Tool:read_file / write_file / list_dir。 执行前调用 Sandbox.enforce(...) 做路径白名单检查。 */
+/**
+ * 文件操作内置 Tool:read_file / write_file / list_dir。
+ *
+ * <p>三个方法都是普通方法,由 ToolConfiguration 用 FunctionCallback.builder().method(...) 装配成工具 (schema
+ * 从方法签名自动生成,不再手写)。执行方法第一件事调 Sandbox.enforce 做路径白名单检查;越界抛 SandboxViolationException、IO 失败抛
+ * IOException,由 AnnotatedToolAdapter 统一映射为 ToolResult.failure (越界不可重试,与存量语义一致)。
+ */
 @Component
 public class FileTools {
 
@@ -19,101 +24,120 @@ public class FileTools {
     this.sandbox = sandbox;
   }
 
-  @Component("read_file")
-  public class ReadFileTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "read_file";
-    }
-
-    @Override
-    public String getDescription() {
-      return "读取文件内容";
-    }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}";
-    }
-
-    @Override
-    public ToolResult execute(String inputJson) {
-      String path = extractField(inputJson, "path");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
-        return ToolResult.success(Files.readString(Path.of(path)));
-      } catch (SandboxViolationException | IOException e) {
-        return ToolResult.failure(e.getMessage(), false);
-      }
-    }
+  public String readFile(String path) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    return Files.readString(Path.of(path));
   }
 
-  @Component("write_file")
-  public class WriteFileTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "write_file";
-    }
-
-    @Override
-    public String getDescription() {
-      return "写入文件内容";
-    }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},"
-          + "\"content\":{\"type\":\"string\"}},\"required\":[\"path\",\"content\"]}";
-    }
-
-    @Override
-    public ToolResult execute(String inputJson) {
-      String path = extractField(inputJson, "path");
-      String content = extractField(inputJson, "content");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_WRITE, path));
-        Files.writeString(Path.of(path), content);
-        return ToolResult.success("written");
-      } catch (SandboxViolationException | IOException e) {
-        return ToolResult.failure(e.getMessage(), false);
-      }
-    }
+  public String writeFile(String path, String content) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_WRITE, path));
+    Files.writeString(Path.of(path), content);
+    return "written";
   }
 
-  @Component("list_dir")
-  public class ListDirTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "list_dir";
+  public String listDir(String path) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    StringBuilder sb = new StringBuilder();
+    try (var stream = Files.list(Path.of(path))) {
+      stream.forEach(p -> sb.append(p.getFileName()).append("\n"));
     }
+    return sb.toString();
+  }
 
-    @Override
-    public String getDescription() {
-      return "列出目录内容";
+  /** 编辑文件:oldText 唯一匹配才替换为 newText 并写回;找不到或出现多次都抛异常、文件一字不动(不落盘)。 */
+  public String editFile(String path, String oldText, String newText) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_WRITE, path));
+    String content = Files.readString(Path.of(path));
+    int count = countOccurrences(content, oldText);
+    if (count == 0) {
+      throw new IllegalArgumentException("oldText not found: " + oldText);
     }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"}},\"required\":[\"path\"]}";
+    if (count > 1) {
+      throw new IllegalArgumentException(
+          "oldText matches " + count + " times, expected exactly once");
     }
+    Files.writeString(Path.of(path), content.replace(oldText, newText));
+    return "edited";
+  }
 
-    @Override
-    public ToolResult execute(String inputJson) {
-      String path = extractField(inputJson, "path");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
-        StringBuilder sb = new StringBuilder();
-        try (var stream = Files.list(Path.of(path))) {
-          stream.forEach(p -> sb.append(p.getFileName()).append("\n"));
+  /** 递归按正则搜文件内容,返回 文件:行号:内容;严格 UTF-8 解码失败(二进制/非 UTF-8)的文件跳过不中断;上限 200 条截断注明。 */
+  public String grep(String path, String pattern) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
+    StringBuilder sb = new StringBuilder();
+    int count = 0;
+    boolean truncated = false;
+    try (var walk = Files.walk(Path.of(path))) {
+      for (Path p : walk.filter(Files::isRegularFile).toList()) {
+        if (count >= 200) {
+          truncated = true;
+          break;
         }
-        return ToolResult.success(sb.toString());
-      } catch (SandboxViolationException | IOException e) {
-        return ToolResult.failure(e.getMessage(), false);
+        String content;
+        try {
+          content = Files.readString(p);
+        } catch (IOException e) {
+          continue; // 非 UTF-8/二进制文件,跳过不中断
+        }
+        String[] lines = content.split("\n", -1);
+        for (int i = 0; i < lines.length; i++) {
+          if (count >= 200) {
+            truncated = true;
+            break;
+          }
+          if (regex.matcher(lines[i]).find()) {
+            sb.append(p).append(":").append(i + 1).append(":").append(lines[i]).append("\n");
+            count++;
+          }
+        }
       }
     }
+    // 截断标记统一收尾追加一次:单个文件内匹配满 200 条后,外层循环可能已无下一个文件
+    if (truncated) {
+      sb.append("(truncated at 200 matches)\n");
+    }
+    return sb.toString();
   }
 
-  /** 极简 JSON 字段提取(避免引入 JSON 库,核心阶段骨架够用) */
+  /** 按通配模式找路径(PathMatcher glob,如 /tmp/**&#47;*.txt);上限 200 条截断注明。通配符前的路径前缀作为扫描根。 */
+  public String glob(String pattern) throws IOException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, pattern));
+    int star = pattern.indexOf('*');
+    int question = pattern.indexOf('?');
+    int cut = star < 0 ? question : (question < 0 ? star : Math.min(star, question));
+    String rootStr = cut < 0 ? pattern : pattern.substring(0, cut);
+    while (rootStr.endsWith("/") && rootStr.length() > 1) {
+      rootStr = rootStr.substring(0, rootStr.length() - 1);
+    }
+    PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + pattern);
+    StringBuilder sb = new StringBuilder();
+    int count = 0;
+    try (var walk = Files.walk(Path.of(rootStr))) {
+      for (Path p : walk.toList()) {
+        if (count >= 200) {
+          sb.append("(truncated at 200 matches)\n");
+          break;
+        }
+        if (matcher.matches(p)) {
+          sb.append(p).append("\n");
+          count++;
+        }
+      }
+    }
+    return sb.toString();
+  }
+
+  private static int countOccurrences(String content, String needle) {
+    int count = 0;
+    int idx = 0;
+    while ((idx = content.indexOf(needle, idx)) >= 0) {
+      count++;
+      idx += needle.length();
+    }
+    return count;
+  }
+
+  /** 极简 JSON 字段提取(避免引入 JSON 库)——19 节 NotifyTools 仍在使用,保留为静态工具方法 */
   public static String extractField(String json, String field) {
     String key = "\"" + field + "\"";
     int idx = json.indexOf(key);

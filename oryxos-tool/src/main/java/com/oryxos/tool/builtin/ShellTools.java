@@ -1,15 +1,19 @@
 package com.oryxos.tool.builtin;
 
-import com.oryxos.core.tool.OryxTool;
-import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.sandbox.Sandbox;
-import com.oryxos.tool.sandbox.SandboxViolationException;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Component;
 
-/** Shell 内置 Tool。执行 bash 命令,带超时和命令白名单。 */
+/**
+ * Shell 内置 Tool:shell。执行 bash 命令,带超时和命令白名单。
+ *
+ * <p>普通方法由 ToolConfiguration 装配成工具;执行第一件事调 Sandbox.enforce(SHELL_COMMAND) 做命令白名单 检查。超时后
+ * destroyForcibly 强杀进程,存量超时语义为失败("command timeout")。
+ */
 @Component
 public class ShellTools {
 
@@ -19,49 +23,23 @@ public class ShellTools {
     this.sandbox = sandbox;
   }
 
-  @Component("shell")
-  public class ShellTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "shell";
+  public String shell(String command) throws IOException, InterruptedException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.SHELL_COMMAND, command));
+    ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
+    pb.redirectErrorStream(true);
+    Process process = pb.start();
+    StringBuilder out = new StringBuilder();
+    try (BufferedReader reader =
+        new BufferedReader(
+            new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+      String line;
+      while ((line = reader.readLine()) != null) out.append(line).append("\n");
     }
-
-    @Override
-    public String getDescription() {
-      return "执行 bash 命令(受命令白名单限制)";
+    boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+    if (!finished) {
+      process.destroyForcibly();
+      throw new RuntimeException("command timeout");
     }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\"}},"
-          + "\"required\":[\"command\"]}";
-    }
-
-    @Override
-    public ToolResult execute(String inputJson) {
-      String command = FileTools.extractField(inputJson, "command");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.SHELL_COMMAND, command));
-        ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        StringBuilder out = new StringBuilder();
-        try (BufferedReader reader =
-            new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-          String line;
-          while ((line = reader.readLine()) != null) out.append(line).append("\n");
-        }
-        boolean finished = process.waitFor(30, TimeUnit.SECONDS);
-        if (!finished) {
-          process.destroyForcibly();
-          return ToolResult.failure("command timeout", false);
-        }
-        return ToolResult.success(out.toString());
-      } catch (SandboxViolationException e) {
-        return ToolResult.failure(e.getMessage(), false);
-      } catch (Exception e) {
-        return ToolResult.failure(e.getMessage(), true);
-      }
-    }
+    return out.toString();
   }
 }

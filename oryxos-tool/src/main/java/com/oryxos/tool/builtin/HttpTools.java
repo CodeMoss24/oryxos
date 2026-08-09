@@ -1,9 +1,7 @@
 package com.oryxos.tool.builtin;
 
-import com.oryxos.core.tool.OryxTool;
-import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.sandbox.Sandbox;
-import com.oryxos.tool.sandbox.SandboxViolationException;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -11,7 +9,11 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import org.springframework.stereotype.Component;
 
-/** HTTP 内置 Tool:http_get / http_post,带域名白名单。 */
+/**
+ * HTTP 内置 Tool:http_get / http_post,带域名白名单。
+ *
+ * <p>普通方法由 ToolConfiguration 装配成工具;执行第一件事调 Sandbox.enforce(HTTP_REQUEST) 做域名白名单 检查,校验不过不发任何请求。
+ */
 @Component
 public class HttpTools {
 
@@ -23,82 +25,24 @@ public class HttpTools {
     this.sandbox = sandbox;
   }
 
-  @Component("http_get")
-  public class HttpGetTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "http_get";
-    }
-
-    @Override
-    public String getDescription() {
-      return "发起 HTTP GET 请求(受域名白名单限制)";
-    }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\"}},\"required\":[\"url\"]}";
-    }
-
-    @Override
-    public ToolResult execute(String inputJson) {
-      String url = FileTools.extractField(inputJson, "url");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
-        HttpRequest req =
-            HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .GET()
-                .build();
-        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-        return ToolResult.success(resp.body());
-      } catch (SandboxViolationException e) {
-        return ToolResult.failure(e.getMessage(), false);
-      } catch (Exception e) {
-        return ToolResult.failure(e.getMessage(), true);
-      }
-    }
+  public String httpGet(String url) throws IOException, InterruptedException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    HttpRequest req =
+        HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build();
+    HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+    return resp.body();
   }
 
-  @Component("http_post")
-  public class HttpPostTool implements OryxTool {
-    @Override
-    public String getName() {
-      return "http_post";
-    }
-
-    @Override
-    public String getDescription() {
-      return "发起 HTTP POST 请求(受域名白名单限制)";
-    }
-
-    @Override
-    public String getInputSchema() {
-      return "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\"},"
-          + "\"body\":{\"type\":\"string\"}},\"required\":[\"url\",\"body\"]}";
-    }
-
-    @Override
-    public ToolResult execute(String inputJson) {
-      String url = FileTools.extractField(inputJson, "url");
-      String body = FileTools.extractField(inputJson, "body");
-      try {
-        sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
-        HttpRequest req =
-            HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-        return ToolResult.success(resp.body());
-      } catch (SandboxViolationException e) {
-        return ToolResult.failure(e.getMessage(), false);
-      } catch (Exception e) {
-        return ToolResult.failure(e.getMessage(), true);
-      }
-    }
+  public String httpPost(String url, String body) throws IOException, InterruptedException {
+    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    HttpRequest req =
+        HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofSeconds(30))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+    HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+    return resp.body();
   }
 }
