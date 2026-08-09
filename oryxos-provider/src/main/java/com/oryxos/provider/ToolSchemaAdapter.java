@@ -1,6 +1,10 @@
 package com.oryxos.provider;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oryxos.core.tool.OryxTool;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
@@ -11,6 +15,8 @@ import org.springframework.ai.model.function.FunctionCallback;
  * inputTypeSchema),不含任何执行逻辑。
  */
 public class ToolSchemaAdapter {
+
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * 将 OryxTool 列表翻译成 Spring AI FunctionCallback 列表。 每个 FunctionCallback 的 call() 返回空字符串——实际执行由
@@ -30,5 +36,31 @@ public class ToolSchemaAdapter {
                     .inputType(Map.class)
                     .build())
         .toList();
+  }
+
+  /**
+   * 将 OryxTool 列表翻译成 OpenAI-compatible tools 数组格式, 用于直接构造 API 请求体(绕过 Spring AI 的
+   * FunctionCallingOptions, 因为 proxyToolCalls=false 会连 tools 都不发给 LLM)。
+   */
+  public List<Map<String, Object>> toOpenAiTools(List<OryxTool> tools) {
+    if (tools == null || tools.isEmpty()) {
+      return List.of();
+    }
+    List<Map<String, Object>> result = new ArrayList<>();
+    for (OryxTool tool : tools) {
+      Map<String, Object> func = new LinkedHashMap<>();
+      func.put("name", tool.getName());
+      func.put("description", tool.getDescription());
+      try {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> params = objectMapper.readValue(tool.getInputSchema(), Map.class);
+        func.put("parameters", params);
+      } catch (JsonProcessingException e) {
+        func.put(
+            "parameters", Map.of("type", "object", "properties", Map.of(), "required", List.of()));
+      }
+      result.add(Map.of("type", "function", "function", func));
+    }
+    return result;
   }
 }

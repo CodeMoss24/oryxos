@@ -38,7 +38,7 @@ oryxos:
     shell:
       allowed-commands: ls,cat,echo,date,python,git
     http:
-      allowed-domains: ""
+      allowed-domains: "open.feishu.cn"
 
 springdoc:
   swagger-ui:

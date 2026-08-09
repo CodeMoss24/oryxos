@@ -27,7 +27,7 @@ public class NotifyTools implements OryxTool {
 
   @Override
   public String getDescription() {
-    return "把消息推送到 Profile notify_channels 配置的目标";
+    return "推送消息到通知渠道（飞书群）。调用此工具才会真正发送消息，不要用文字模拟或描述推送结果。";
   }
 
   @Override

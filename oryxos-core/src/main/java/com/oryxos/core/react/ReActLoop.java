@@ -4,6 +4,8 @@ import com.oryxos.core.memory.MemoryService;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.session.Message;
 import com.oryxos.core.session.Session;
+import com.oryxos.core.tool.OryxTool;
+import com.oryxos.core.tool.ToolRegistry;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,16 +38,19 @@ public class ReActLoop {
   private final ProviderPort providerPort;
   private final ToolExecutor toolExecutor;
   private final MemoryService memoryService;
+  private final ToolRegistry toolRegistry;
 
   public ReActLoop(
       PromptBuilder promptBuilder,
       ProviderPort providerPort,
       ToolExecutor toolExecutor,
-      MemoryService memoryService) {
+      MemoryService memoryService,
+      ToolRegistry toolRegistry) {
     this.promptBuilder = promptBuilder;
     this.providerPort = providerPort;
     this.toolExecutor = toolExecutor;
     this.memoryService = memoryService;
+    this.toolRegistry = toolRegistry;
   }
 
   public String run(Session session, String userMessage, Profile profile, String agentMdBody) {
@@ -63,7 +68,8 @@ public class ReActLoop {
               memoryBlock,
               toolListBlock,
               promptBuilder.truncateHistory(session, profile.getSettings().getMaxHistoryTurns()));
-      Prompt prompt = new Prompt(messages);
+      List<OryxTool> tools = toolRegistry.subset(profile.getTools());
+      Prompt prompt = new Prompt(messages, tools);
       LlmResponse response = providerPort.chat(session.getSessionId(), profile, prompt);
 
       if (response.toolCalls() == null || response.toolCalls().isEmpty()) {
@@ -71,10 +77,10 @@ public class ReActLoop {
         return response.content();
       }
 
-      session.append(Message.assistant(response.content()));
+      session.append(Message.assistant(response.content(), response.toolCalls()));
       for (ToolCall call : response.toolCalls()) {
         String result = toolExecutor.execute(session.getSessionId(), call, profile);
-        session.append(Message.tool(result));
+        session.append(Message.tool(result, call.id()));
       }
     }
 

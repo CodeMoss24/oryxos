@@ -26,6 +26,7 @@ class ReActLoopTest {
   @Mock private ProviderPort providerPort;
   @Mock private ToolExecutor toolExecutor;
   @Mock private com.oryxos.core.memory.MemoryService memoryService;
+  @Mock private com.oryxos.core.tool.ToolRegistry toolRegistry;
 
   private ReActLoop loop;
   private Session session;
@@ -34,7 +35,7 @@ class ReActLoopTest {
 
   @BeforeEach
   void setUp() {
-    loop = new ReActLoop(promptBuilder, providerPort, toolExecutor, memoryService);
+    loop = new ReActLoop(promptBuilder, providerPort, toolExecutor, memoryService, toolRegistry);
     session = new Session("s-1", "test-profile", "cli", "user1");
     profile = new Profile();
     profile.setName("test-profile");

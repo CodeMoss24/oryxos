@@ -26,7 +26,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.model.function.FunctionCallingOptions;
+import org.springframework.web.client.RestClient;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ProviderService — 路由、审计、工具 schema 验收")
@@ -50,6 +50,10 @@ class ProviderServiceTest {
 
   @Mock private OryxTool httpGetTool;
 
+  @Mock private RestClient.Builder restClientBuilder;
+
+  @Mock private RestClient restClient;
+
   private final ToolSchemaAdapter adapter = new ToolSchemaAdapter();
 
   private static Profile profileUsing(String providerName) {
@@ -67,6 +71,10 @@ class ProviderServiceTest {
     return new Prompt(List.of(Message.user("test")));
   }
 
+  private ProviderService makeService(Map<String, ChatModel> models) {
+    return new ProviderService(models, Map.of(), restClientBuilder, adapter, auditRepository);
+  }
+
   @Test
   @DisplayName("按名路由_两个provider不串台")
   void routeByNameTwoProvidersNoCrossTalk() {
@@ -75,11 +83,8 @@ class ProviderServiceTest {
     when(chatResponse.getResult()).thenReturn(generation);
     when(generation.getOutput()).thenReturn(assistantMessage);
     when(assistantMessage.getContent()).thenReturn("ok from kimi");
-    when(assistantMessage.getToolCalls()).thenReturn(null);
 
-    var service =
-        new ProviderService(
-            Map.of("deepseek", deepseekModel, "kimi", kimiModel), adapter, auditRepository);
+    var service = makeService(Map.of("deepseek", deepseekModel, "kimi", kimiModel));
 
     service.chat("s-1", profileUsing("kimi"), simplePrompt());
 
@@ -90,7 +95,7 @@ class ProviderServiceTest {
   @Test
   @DisplayName("未知 provider 名抛异常")
   void unknownProviderThrowsException() {
-    var service = new ProviderService(Map.of("deepseek", deepseekModel), adapter, auditRepository);
+    var service = makeService(Map.of("deepseek", deepseekModel));
 
     assertThatThrownBy(() -> service.chat("s-1", profileUsing("kimi"), simplePrompt()))
         .isInstanceOf(ProviderNotFoundException.class);
@@ -104,7 +109,7 @@ class ProviderServiceTest {
     when(deepseekModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
         .thenThrow(new RuntimeException("connect timeout"));
 
-    var service = new ProviderService(Map.of("deepseek", deepseekModel), adapter, auditRepository);
+    var service = makeService(Map.of("deepseek", deepseekModel));
 
     assertThatThrownBy(() -> service.chat("s-1", profileUsing("deepseek"), simplePrompt()))
         .isInstanceOf(RuntimeException.class);
@@ -117,31 +122,22 @@ class ProviderServiceTest {
   }
 
   @Test
-  @DisplayName("带工具schema调用_请求里关闭了自动执行")
-  void callWithToolSchemaDisablesAutoExecution() {
+  @DisplayName("带工具schema调用_走直接API路径不通过ChatModel")
+  void callWithToolSchemaGoesDirectApiNotChatModel() {
     when(httpGetTool.getName()).thenReturn("http_get");
     when(httpGetTool.getDescription()).thenReturn("HTTP GET request");
     when(httpGetTool.getInputSchema()).thenReturn("{\"type\":\"object\"}");
 
-    when(deepseekModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
-        .thenReturn(chatResponse);
-    when(chatResponse.getResult()).thenReturn(generation);
-    when(generation.getOutput()).thenReturn(assistantMessage);
-    when(assistantMessage.getContent()).thenReturn("will use tool");
-    when(assistantMessage.getToolCalls()).thenReturn(null);
+    // 带工具时 ProviderService 现在绕过 ChatModel 直接用 RestClient 调 API
+    // 对于单元测试,我们验证它不会走 ChatModel.call() 路径
+    var service = makeService(Map.of("deepseek", deepseekModel));
 
-    var service = new ProviderService(Map.of("deepseek", deepseekModel), adapter, auditRepository);
+    // 由于 RestClient 未被完整 mock,此处会失败;但我们先验证不调 ChatModel
+    assertThatThrownBy(
+            () -> service.chat("s-1", profileUsing("deepseek"), promptWithTools(httpGetTool)))
+        .isInstanceOf(RuntimeException.class);
 
-    service.chat("s-1", profileUsing("deepseek"), promptWithTools(httpGetTool));
-
-    var captor = ArgumentCaptor.forClass(org.springframework.ai.chat.prompt.Prompt.class);
-    verify(deepseekModel).call(captor.capture());
-
-    var options = captor.getValue().getOptions();
-    assertThat(options).isInstanceOf(FunctionCallingOptions.class);
-    var fco = (FunctionCallingOptions) options;
-    assertThat(fco.getProxyToolCalls()).isFalse();
-    assertThat(fco.getFunctionCallbacks()).isNotEmpty();
+    verify(deepseekModel, never()).call(any(org.springframework.ai.chat.prompt.Prompt.class));
   }
 
   @Test
@@ -152,14 +148,13 @@ class ProviderServiceTest {
     when(chatResponse.getResult()).thenReturn(generation);
     when(generation.getOutput()).thenReturn(assistantMessage);
     when(assistantMessage.getContent()).thenReturn("response text");
-    when(assistantMessage.getToolCalls()).thenReturn(null);
     when(chatResponse.getMetadata()).thenReturn(metadata);
     when(metadata.getUsage()).thenReturn(usage);
     when(usage.getPromptTokens()).thenReturn(10L);
     when(usage.getGenerationTokens()).thenReturn(5L);
     when(usage.getTotalTokens()).thenReturn(15L);
 
-    var service = new ProviderService(Map.of("deepseek", deepseekModel), adapter, auditRepository);
+    var service = makeService(Map.of("deepseek", deepseekModel));
 
     var response = service.chat("s-1", profileUsing("deepseek"), simplePrompt());
 

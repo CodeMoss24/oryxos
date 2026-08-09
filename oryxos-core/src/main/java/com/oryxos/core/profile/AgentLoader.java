@@ -97,7 +97,36 @@ public class AgentLoader {
     List<String> bootstrap = toStringList(front.get("bootstrap"));
     if (bootstrap != null) profile.setBootstrap(bootstrap);
 
+    // notify_channels: [{type, url}, ...]
+    List<Map<String, String>> rawChannels =
+        (List<Map<String, String>>) front.get("notify_channels");
+    if (rawChannels != null) {
+      List<Profile.NotifyChannel> channels = new ArrayList<>();
+      for (Map<String, String> ch : rawChannels) {
+        String type = ch.get("type");
+        Map<String, String> config = new java.util.LinkedHashMap<>();
+        for (var entry : ch.entrySet()) {
+          if (!"type".equals(entry.getKey())) {
+            config.put(entry.getKey(), resolveEnv(entry.getValue()));
+          }
+        }
+        channels.add(new Profile.NotifyChannel(type, config));
+      }
+      profile.setNotifyChannels(channels);
+    }
+
     return profile;
+  }
+
+  /** Resolve ${ENV_VAR} placeholders in config values. */
+  private static String resolveEnv(String value) {
+    if (value == null) return null;
+    if (value.startsWith("${") && value.endsWith("}")) {
+      String envKey = value.substring(2, value.length() - 1);
+      String resolved = System.getenv(envKey);
+      return resolved != null ? resolved : value;
+    }
+    return value;
   }
 
   /** 解析 AGENT.md:分离 frontmatter(YAML)和正文(Markdown)。 */

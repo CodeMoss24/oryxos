@@ -54,10 +54,24 @@ public class ProviderAutoConfiguration {
   }
 
   @Bean
+  public Map<String, ProviderProperties.ProviderEntry> providerConfigMap(ProviderProperties props) {
+    Map<String, ProviderProperties.ProviderEntry> map = new HashMap<>();
+    if (props.getProviders() != null) {
+      for (var entry : props.getProviders()) {
+        map.put(entry.name(), entry);
+      }
+    }
+    return map;
+  }
+
+  @Bean
   public ProviderService providerService(
       Map<String, ChatModel> providerMap,
+      Map<String, ProviderProperties.ProviderEntry> providerConfigs,
+      RestClient.Builder restClientBuilder,
       ToolSchemaAdapter toolSchemaAdapter,
       LlmCallRepository llmCallRepository) {
-    return new ProviderService(providerMap, toolSchemaAdapter, llmCallRepository);
+    return new ProviderService(
+        providerMap, providerConfigs, restClientBuilder, toolSchemaAdapter, llmCallRepository);
   }
 }

@@ -44,7 +44,7 @@ public class SessionCodec {
     return session;
   }
 
-  /** 序列化为 JSON 数组字符串,如 [{"role":"user","content":"hi"}] */
+  /** 序列化为 JSON 数组字符串,包含可选字段 toolCallId / toolCalls */
   public String serializeMessages(List<Message> messages) {
     if (messages == null || messages.isEmpty()) {
       return "[]";
@@ -56,8 +56,12 @@ public class SessionCodec {
       sb.append("{\"role\":\"")
           .append(escapeJson(m.role()))
           .append("\",\"content\":\"")
-          .append(escapeJson(m.content()))
-          .append("\"}");
+          .append(escapeJson(m.content() != null ? m.content() : ""))
+          .append("\"");
+      if (m.toolCallId() != null) {
+        sb.append(",\"toolCallId\":\"").append(escapeJson(m.toolCallId())).append("\"");
+      }
+      sb.append("}");
     }
     return sb.append("]").toString();
   }
@@ -84,6 +88,10 @@ public class SessionCodec {
   private Message parseMessage(String objectJson) {
     String role = extractField(objectJson, "role");
     String content = extractField(objectJson, "content");
+    String toolCallId = extractField(objectJson, "toolCallId");
+    if (!toolCallId.isEmpty()) {
+      return new Message(role, content, null, toolCallId);
+    }
     return new Message(role, content);
   }
 
