@@ -47,6 +47,10 @@ public class WebhookNotifyAdapter implements NotifyChannelAdapter {
               .build();
       HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
       log.info("notify webhook responded {}", resp.statusCode());
+      if (resp.statusCode() >= 400) {
+        throw new RuntimeException(
+            "webhook notify failed: HTTP " + resp.statusCode() + " " + resp.body());
+      }
     } catch (Exception e) {
       throw new RuntimeException("webhook notify failed", e);
     }
