@@ -1,4 +1,4 @@
-package com.oryxos.memory;
+package com.oryxos.core.memory;
 
 /**
  * 长期记忆分区。

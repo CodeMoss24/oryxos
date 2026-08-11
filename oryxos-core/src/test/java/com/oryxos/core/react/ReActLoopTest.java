@@ -54,7 +54,7 @@ class ReActLoopTest {
   @DisplayName("无工具调用一轮收尾")
   void returnsResponseWhenNoToolCalls() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
-    when(promptBuilder.buildMemoryBlock(any(), any())).thenReturn("");
+    when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
     when(promptBuilder.buildToolListBlock(any())).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(List.of());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
@@ -72,7 +72,7 @@ class ReActLoopTest {
   @DisplayName("有工具调用则执行并回填进下一轮")
   void executesToolAndContinuesLoop() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
-    when(promptBuilder.buildMemoryBlock(any(), any())).thenReturn("");
+    when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
     when(promptBuilder.buildToolListBlock(any())).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
@@ -94,7 +94,7 @@ class ReActLoopTest {
   @DisplayName("模型一直要调工具_转满最大轮数强制停")
   void stopsAtMaxIterationsWhenModelNeverConverges() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
-    when(promptBuilder.buildMemoryBlock(any(), any())).thenReturn("");
+    when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
     when(promptBuilder.buildToolListBlock(any())).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
@@ -112,7 +112,7 @@ class ReActLoopTest {
   @DisplayName("每轮响应和工具结果都累积进Session")
   void accumulatesMessagesInSession() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
-    when(promptBuilder.buildMemoryBlock(any(), any())).thenReturn("");
+    when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
     when(promptBuilder.buildToolListBlock(any())).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))

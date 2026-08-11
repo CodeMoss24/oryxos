@@ -1,13 +1,16 @@
 package com.oryxos.memory;
 
+import com.oryxos.core.memory.MemoryScope;
 import com.oryxos.core.memory.MemoryService;
-import com.oryxos.core.profile.Profile;
 import com.oryxos.core.session.Session;
+import java.util.List;
 import org.springframework.stereotype.Service;
 
 /**
- * MemoryService 统一门面实现。对 ReAct 循环暴露统一的记忆读写接口。 内部把会话记忆委托给 Session(由 AgentService 传入),把长期记忆委托给
- * LongTermMemoryStore。
+ * MemoryService 统一门面实现。实现很薄:buildContext 取长期记忆(核心区全量 + 归档区截断后),remember / recall 直接转发给
+ * LongTermMemoryStore。真正可换的是 LongTermMemoryStore 这一层。
+ *
+ * <p>会话历史段由 PromptBuilder 的会话历史消息独立负责,本实现不拼接,避免重复注入。
  */
 @Service
 public class MemoryServiceImpl implements MemoryService {
@@ -19,30 +22,18 @@ public class MemoryServiceImpl implements MemoryService {
   }
 
   @Override
-  public String loadContext(Profile profile, Session session) {
-    StringBuilder sb = new StringBuilder();
-    if (session != null && session.getMessages() != null) {
-      sb.append("## 会话历史\n");
-      for (var msg : session.getMessages()) {
-        sb.append(msg.role()).append(": ").append(msg.content()).append("\n");
-      }
-    }
-    String longTerm = longTermMemoryStore.load();
-    if (longTerm != null && !longTerm.isBlank()) {
-      sb.append("\n## 长期记忆\n").append(longTerm);
-    }
-    return sb.toString();
+  public String buildContext(Session session) {
+    return longTermMemoryStore.load();
   }
 
   @Override
-  public void append(String content, String scope) {
-    MemoryScope memoryScope =
-        "CORE".equalsIgnoreCase(scope) ? MemoryScope.CORE : MemoryScope.ARCHIVAL;
-    longTermMemoryStore.append(content, memoryScope);
+  public void remember(String content, MemoryScope scope) {
+    MemoryScope effective = scope == null ? MemoryScope.ARCHIVAL : scope; // 缺省写归档——契约三
+    longTermMemoryStore.append(content, effective);
   }
 
   @Override
-  public String recallByKeyword(String query) {
-    return longTermMemoryStore.recallByKeyword(query);
+  public List<String> recall(String keyword) {
+    return longTermMemoryStore.recallByKeyword(keyword);
   }
 }

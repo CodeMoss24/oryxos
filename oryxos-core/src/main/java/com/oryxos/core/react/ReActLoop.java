@@ -57,7 +57,7 @@ public class ReActLoop {
     session.append(Message.user(userMessage));
 
     String systemPrompt = promptBuilder.buildSystemPrompt(profile, agentMdBody);
-    String memoryBlock = promptBuilder.buildMemoryBlock(profile, session);
+    String memoryBlock = promptBuilder.buildMemoryBlock(session);
     String toolListBlock = promptBuilder.buildToolListBlock(profile);
     int maxIterations = profile.getSettings().getMaxIterations();
 

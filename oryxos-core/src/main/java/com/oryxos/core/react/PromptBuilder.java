@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 组装每轮 LLM 调用的 Prompt。按四部分顺序拼接: 1. system prompt(AGENT.md 正文 + Bootstrap,由 ContextLoader
- * 提供;末尾附当前日期时间) 2. Memory 注入(会话历史 + 长期记忆,由 MemoryService 提供) 3. 对话历史(按 maxHistoryTurns 截断后的 Session
+ * 提供;末尾附当前日期时间) 2. Memory 注入(长期记忆,由 MemoryService 提供) 3. 对话历史(按 maxHistoryTurns 截断后的 Session
  * messages) 4. 当前 Profile 可用的 Tool 列表(按 Function Calling 格式)
  */
 @Component
@@ -34,8 +34,8 @@ public class PromptBuilder {
     return contextLoader.loadSystemPrompt(profile, agentMdBody);
   }
 
-  public String buildMemoryBlock(Profile profile, Session session) {
-    return memoryService.loadContext(profile, session);
+  public String buildMemoryBlock(Session session) {
+    return memoryService.buildContext(session);
   }
 
   public List<Message> truncateHistory(Session session, int maxTurns) {

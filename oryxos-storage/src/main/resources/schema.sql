@@ -35,3 +35,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_active_at TEXT NOT NULL,
     archived_at TEXT
 );
+
+-- memory_entries:长期记忆条目(手工建表,与 sessions/llm_calls 同口径)
+CREATE TABLE IF NOT EXISTS memory_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope VARCHAR(16) NOT NULL,          -- CORE / ARCHIVAL
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_entries (scope);

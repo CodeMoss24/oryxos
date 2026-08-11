@@ -1,26 +1,22 @@
 package com.oryxos.core.memory;
 
-import com.oryxos.core.profile.Profile;
 import com.oryxos.core.session.Session;
+import java.util.List;
 
 /**
- * Memory 统一门面。对 ReAct 循环暴露统一的记忆读写接口。 内部把会话记忆委托给 SessionManager(底层 SQLite),把长期记忆委托给
- * LongTermMemory(底层 MEMORY.md)。
+ * Memory 统一门面。对上层(PromptBuilder / MemoryTools / ReActLoop)暴露三个固定方法,上层只认 本接口,不感知底层后端(Markdown /
+ * SQLite / Mem0,靠 memory.backend 一行配置切换)。
  *
- * <p>ReAct 循环组装 prompt 时只调 MemoryService 一个接口拿到完整上下文。
+ * <p>会话历史由 PromptBuilder 的会话历史段独立负责;本门面只管长期记忆,避免重复注入。
  */
 public interface MemoryService {
 
-  /** 加载上下文:会话历史 + 长期记忆。 */
-  String loadContext(Profile profile, Session session);
+  /** 返回长期记忆上下文:核心区全量 + 归档区截断后,供组装 system prompt 注入。 */
+  String buildContext(Session session);
 
-  /**
-   * 追加长期记忆。
-   *
-   * @param scope "CORE" 或 "ARCHIVAL",由 Agent 显式指定
-   */
-  void append(String content, String scope);
+  /** 追加一条长期记忆到指定分区。scope 由调用方显式指定,系统不猜。 */
+  void remember(String content, MemoryScope scope);
 
-  /** 按关键词检索(只在归档记忆区做匹配)。 */
-  String recallByKeyword(String query);
+  /** 按关键词检索长期记忆,只在归档区匹配;未命中返回空列表,不抛异常。 */
+  List<String> recall(String keyword);
 }
