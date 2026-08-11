@@ -4,8 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oryxos.tool.sandbox.FileSandboxProperties;
+import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.Sandbox;
 import com.oryxos.tool.sandbox.SandboxViolationException;
+import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.sandbox.WhitelistSandbox;
 import java.net.http.HttpClient;
 import java.util.List;
@@ -49,7 +52,7 @@ class DuckDuckGoSearchProviderTest {
             + "],"
             + "\"AbstractText\":\"abstract answer\",\"AbstractURL\":\"http://abstract.example/\"}";
     server.enqueue(new MockResponse().setBody(body));
-    DuckDuckGoSearchProvider provider = provider(new WhitelistSandbox("/", "", "localhost"));
+    DuckDuckGoSearchProvider provider = provider(sandboxWithDomain("localhost"));
     List<SearchResult> results = provider.search("java");
     assertEquals(5, results.size(), "4 条 RelatedTopics(空条目跳过) + 1 条 Abstract 兜底");
     assertTrue(hasTitle(results, "topic one"), "顶层条目");
@@ -70,7 +73,7 @@ class DuckDuckGoSearchProviderTest {
   @DisplayName("web_search:空结果返回空列表,不抛异常")
   void emptyResultReturnsEmptyList() {
     server.enqueue(new MockResponse().setBody("{\"RelatedTopics\":[],\"AbstractText\":\"\"}"));
-    DuckDuckGoSearchProvider provider = provider(new WhitelistSandbox("/", "", "localhost"));
+    DuckDuckGoSearchProvider provider = provider(sandboxWithDomain("localhost"));
     assertTrue(provider.search("nothing").isEmpty(), "空结果返回空列表");
   }
 
@@ -78,7 +81,7 @@ class DuckDuckGoSearchProviderTest {
   @DisplayName("web_search:HTTP 非 200 抛异常")
   void httpErrorThrows() {
     server.enqueue(new MockResponse().setResponseCode(500));
-    DuckDuckGoSearchProvider provider = provider(new WhitelistSandbox("/", "", "localhost"));
+    DuckDuckGoSearchProvider provider = provider(sandboxWithDomain("localhost"));
     RuntimeException e = assertThrows(RuntimeException.class, () -> provider.search("java"));
     assertTrue(e.getMessage().contains("500"), () -> "got: " + e.getMessage());
   }
@@ -88,16 +91,23 @@ class DuckDuckGoSearchProviderTest {
   void sandboxBlocksBeforeAnyRequest() {
     server.enqueue(new MockResponse().setBody("{\"RelatedTopics\":[],\"AbstractText\":\"\"}"));
     // 空域名白名单:任何 HTTP 请求都越界——必须在校验处被拦下,不发一个请求
-    DuckDuckGoSearchProvider provider = provider(new WhitelistSandbox("/", "", ""));
+    DuckDuckGoSearchProvider provider = provider(sandboxWithDomain(""));
     SandboxViolationException e =
         assertThrows(SandboxViolationException.class, () -> provider.search("java"));
-    assertTrue(e.getMessage().contains("not allowed"), () -> "got: " + e.getMessage());
+    assertTrue(e.getMessage().contains("不在白名单内"), () -> "got: " + e.getMessage());
     assertEquals(0, server.getRequestCount(), "白名单校验失败后不得发出任何请求");
   }
 
   private DuckDuckGoSearchProvider provider(Sandbox sandbox) {
     return new DuckDuckGoSearchProvider(
         sandbox, server.url("/").toString(), HttpClient.newHttpClient());
+  }
+
+  private static WhitelistSandbox sandboxWithDomain(String domain) {
+    return new WhitelistSandbox(
+        new FileSandboxProperties(List.of("/")),
+        new ShellSandboxProperties(List.of()),
+        new HttpSandboxProperties(List.of(domain)));
   }
 
   private static boolean hasTitle(List<SearchResult> results, String title) {

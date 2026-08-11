@@ -9,12 +9,16 @@ import com.oryxos.tool.interaction.ConsoleUserInteraction;
 import com.oryxos.tool.interaction.InteractionTools;
 import com.oryxos.tool.interaction.UnsupportedUserInteraction;
 import com.oryxos.tool.interaction.UserInteraction;
+import com.oryxos.tool.sandbox.FileSandboxProperties;
+import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.search.DuckDuckGoSearchProvider;
 import java.net.http.HttpClient;
 import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -29,6 +33,11 @@ import org.springframework.context.annotation.Configuration;
  * 定时任务等无人值守)用 Unsupported——ask_user 在任何环境都注册,拿不到回答抛异常 映射为 failure,绝不静默。
  */
 @Configuration
+@EnableConfigurationProperties({
+  FileSandboxProperties.class,
+  ShellSandboxProperties.class,
+  HttpSandboxProperties.class
+})
 public class ToolConfiguration {
 
   @Bean

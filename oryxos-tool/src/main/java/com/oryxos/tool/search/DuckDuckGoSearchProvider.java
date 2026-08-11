@@ -1,7 +1,9 @@
 package com.oryxos.tool.search;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oryxos.tool.sandbox.ActionType;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.SandboxAction;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -43,7 +45,7 @@ public class DuckDuckGoSearchProvider implements SearchProvider {
             + URLEncoder.encode(query, StandardCharsets.UTF_8)
             + "&format=json&no_html=1";
     // 第一件事过白名单:域名校验在请求发出之前(校验失败不发任何请求)
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, url));
     try {
       HttpRequest req =
           HttpRequest.newBuilder()

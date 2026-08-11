@@ -1,6 +1,8 @@
 package com.oryxos.tool.notify;
 
+import com.oryxos.tool.sandbox.ActionType;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.SandboxAction;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,7 +37,7 @@ public class WebhookNotifyAdapter implements NotifyChannelAdapter {
     if (url == null || url.isBlank()) {
       throw new IllegalArgumentException("notify target missing 'url'");
     }
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, url));
     String body = "{\"msg_type\":\"text\",\"content\":{\"text\":" + quote(content) + "}}";
     try {
       HttpRequest req =

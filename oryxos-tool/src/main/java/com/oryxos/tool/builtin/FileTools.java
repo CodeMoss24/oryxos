@@ -1,6 +1,8 @@
 package com.oryxos.tool.builtin;
 
+import com.oryxos.tool.sandbox.ActionType;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.SandboxAction;
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -25,18 +27,18 @@ public class FileTools {
   }
 
   public String readFile(String path) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
     return Files.readString(Path.of(path));
   }
 
   public String writeFile(String path, String content) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_WRITE, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     Files.writeString(Path.of(path), content);
     return "written";
   }
 
   public String listDir(String path) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
     StringBuilder sb = new StringBuilder();
     try (var stream = Files.list(Path.of(path))) {
       stream.forEach(p -> sb.append(p.getFileName()).append("\n"));
@@ -46,7 +48,7 @@ public class FileTools {
 
   /** 编辑文件:oldText 唯一匹配才替换为 newText 并写回;找不到或出现多次都抛异常、文件一字不动(不落盘)。 */
   public String editFile(String path, String oldText, String newText) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_WRITE, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     String content = Files.readString(Path.of(path));
     int count = countOccurrences(content, oldText);
     if (count == 0) {
@@ -62,7 +64,7 @@ public class FileTools {
 
   /** 递归按正则搜文件内容,返回 文件:行号:内容;严格 UTF-8 解码失败(二进制/非 UTF-8)的文件跳过不中断;上限 200 条截断注明。 */
   public String grep(String path, String pattern) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
     java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
     StringBuilder sb = new StringBuilder();
     int count = 0;
@@ -101,7 +103,7 @@ public class FileTools {
 
   /** 按通配模式找路径(PathMatcher glob,如 /tmp/**&#47;*.txt);上限 200 条截断注明。通配符前的路径前缀作为扫描根。 */
   public String glob(String pattern) throws IOException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.FILE_READ, pattern));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, pattern));
     int star = pattern.indexOf('*');
     int question = pattern.indexOf('?');
     int cut = star < 0 ? question : (question < 0 ? star : Math.min(star, question));

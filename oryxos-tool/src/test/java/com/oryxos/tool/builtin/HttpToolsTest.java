@@ -1,5 +1,6 @@
 package com.oryxos.tool.builtin;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -7,8 +8,12 @@ import com.oryxos.core.tool.ToolRegistry;
 import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.ToolTestFixture;
 import com.oryxos.tool.adapter.AnnotatedToolAdapter;
+import com.oryxos.tool.sandbox.FileSandboxProperties;
+import com.oryxos.tool.sandbox.HttpSandboxProperties;
+import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.sandbox.WhitelistSandbox;
 import java.nio.file.Path;
+import java.util.List;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterAll;
@@ -67,22 +72,31 @@ class HttpToolsTest {
   }
 
   @Test
-  @DisplayName("http_get:越界会被拦")
-  void httpGetBlocked() {
-    ToolResult r =
-        ToolTestFixture.registry()
-            .find("http_get")
-            .orElseThrow(() -> new AssertionError("tool not registered: http_get"))
-            .execute("{\"url\":\"https://evil.com/data\"}");
-    assertFalse(r.success(), "白名单外域名必须失败");
-    assertTrue(
-        r.errorMessage().contains("not allowed"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
+  @DisplayName("http_get:越界会被拦——请求从未发出(MockWebServer 计数为 0)")
+  void httpGetBlocked() throws Exception {
+    // fixture 沙箱域名白名单不含 localhost;URL 指向 MockWebServer——若校验失效请求会到达 server,计数即 >0
+    try (MockWebServer server = new MockWebServer()) {
+      server.enqueue(new MockResponse().setBody("secret"));
+      server.start();
+      ToolResult r =
+          ToolTestFixture.registry()
+              .find("http_get")
+              .orElseThrow(() -> new AssertionError("tool not registered: http_get"))
+              .execute("{\"url\":\"" + server.url("/data") + "\"}");
+      assertFalse(r.success(), "白名单外域名必须失败");
+      assertTrue(r.errorMessage().contains("不在白名单内"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
+      assertEquals(0, server.getRequestCount(), "白名单校验失败后不得发出任何请求");
+    }
   }
 
   /** 自建放行 localhost 的沙箱 + 工具,走 FunctionCallback 管道注册,再经注册表执行——与生产路径同构。 */
   private static ToolResult executeAgainstMock(
       MockWebServer server, String name, String inputJson) {
-    WhitelistSandbox sandbox = new WhitelistSandbox(tempDir.toString(), "echo,ls", "localhost");
+    WhitelistSandbox sandbox =
+        new WhitelistSandbox(
+            new FileSandboxProperties(List.of(tempDir.toString())),
+            new ShellSandboxProperties(List.of("echo", "ls")),
+            new HttpSandboxProperties(List.of("localhost")));
     HttpTools tools = new HttpTools(sandbox);
     FunctionCallback fc;
     if (name.equals("http_get")) {

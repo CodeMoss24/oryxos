@@ -1,6 +1,8 @@
 package com.oryxos.tool.builtin;
 
+import com.oryxos.tool.sandbox.ActionType;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.SandboxAction;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -26,7 +28,7 @@ public class HttpTools {
   }
 
   public String httpGet(String url) throws IOException, InterruptedException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, url));
     HttpRequest req =
         HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30)).GET().build();
     HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
@@ -34,7 +36,7 @@ public class HttpTools {
   }
 
   public String httpPost(String url, String body) throws IOException, InterruptedException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.HTTP_REQUEST, url));
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, url));
     HttpRequest req =
         HttpRequest.newBuilder()
             .uri(URI.create(url))

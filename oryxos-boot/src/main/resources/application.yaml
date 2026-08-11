@@ -34,13 +34,23 @@ oryxos:
     # 长期记忆后端:markdown(默认,文件 MEMORY.md)| sqlite(memory_entries 表)| mem0(外部服务,
     # 需配 MEM0_BASE_URL / MEM0_USER_ID 环境变量)。换后端只改这一行,MemoryService 上层代码不动。
     backend: markdown
-  sandbox:
-    file:
-      allowed-paths: .oryxos
-    shell:
-      allowed-commands: ls,cat,echo,date,python,git
-    http:
-      allowed-domains: "open.feishu.cn"
+
+# 沙箱白名单(第24节 Sandbox):配置项为空 = "什么都不允许"(任何动作都拒绝),而非"不校验放行"。
+# 路径为相对值时按启动时当前工作目录解析为绝对路径后再比对。
+file:
+  allowed_paths:
+    - .oryxos
+shell:
+  allowed_commands:
+    - ls
+    - cat
+    - echo
+    - date
+    - python
+    - git
+http:
+  allowed_domains:
+    - "open.feishu.cn"
 
 springdoc:
   swagger-ui:

@@ -1,6 +1,8 @@
 package com.oryxos.tool.builtin;
 
+import com.oryxos.tool.sandbox.ActionType;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.SandboxAction;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,7 +26,7 @@ public class ShellTools {
   }
 
   public String shell(String command) throws IOException, InterruptedException {
-    sandbox.enforce(new Sandbox.SandboxAction(Sandbox.ActionType.SHELL_COMMAND, command));
+    sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, command));
     ProcessBuilder pb = new ProcessBuilder("bash", "-c", command);
     pb.redirectErrorStream(true);
     Process process = pb.start();

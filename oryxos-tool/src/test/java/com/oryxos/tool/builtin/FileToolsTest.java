@@ -198,7 +198,6 @@ class FileToolsTest {
 
   private static void assertBlocked(ToolResult r) {
     assertFalse(r.success(), "越界输入必须失败");
-    assertTrue(
-        r.errorMessage().contains("not allowed"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
+    assertTrue(r.errorMessage().contains("不在白名单内"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
   }
 }

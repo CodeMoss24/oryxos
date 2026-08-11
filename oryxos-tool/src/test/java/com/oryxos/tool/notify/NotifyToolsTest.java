@@ -7,11 +7,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileContext;
 import com.oryxos.core.tool.ToolResult;
+import com.oryxos.tool.sandbox.ActionType;
+import com.oryxos.tool.sandbox.FileSandboxProperties;
+import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.ShellSandboxProperties;
+import com.oryxos.tool.sandbox.WhitelistSandbox;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -85,7 +92,28 @@ class NotifyToolsTest {
     notifyTools.execute("{\"content\":\"hello\"}");
 
     InOrder inOrder = inOrder(sandbox, adapter);
-    inOrder.verify(sandbox).enforce(argThat(a -> a.type() == Sandbox.ActionType.HTTP_REQUEST));
+    inOrder.verify(sandbox).enforce(argThat(a -> a.type() == ActionType.HTTP_REQUEST));
     inOrder.verify(adapter).send(any(), eq("hello"));
+  }
+
+  @Test
+  @DisplayName("notify:真实沙箱拒绝时推送未发生——mock adapter 从未收到发送")
+  void sandboxBlockedNotifyNeverSends() {
+    // 空域名白名单 = 什么都不允许:enforce 抛 SandboxViolationException,adapter 不得被调用
+    WhitelistSandbox realSandbox =
+        new WhitelistSandbox(
+            new FileSandboxProperties(List.of()),
+            new ShellSandboxProperties(List.of()),
+            new HttpSandboxProperties(List.of()));
+    NotifyTools tools = new NotifyTools(realSandbox, adapter);
+    Profile.NotifyChannel ch =
+        new Profile.NotifyChannel("webhook", Map.of("url", "https://example.com/webhook"));
+    ProfileContext.set(profileWithChannels(ch));
+
+    ToolResult result = tools.execute("{\"content\":\"danger\"}");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errorMessage()).contains("不在白名单内");
+    verify(adapter, never()).send(any(), any());
   }
 }

@@ -8,9 +8,13 @@ import com.oryxos.tool.builtin.WebSearchTools;
 import com.oryxos.tool.config.ToolConfiguration;
 import com.oryxos.tool.demo.DemoCompanyTool;
 import com.oryxos.tool.interaction.InteractionTools;
+import com.oryxos.tool.sandbox.FileSandboxProperties;
+import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.Sandbox;
+import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.sandbox.WhitelistSandbox;
 import java.nio.file.Path;
+import java.util.List;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 /**
@@ -42,7 +46,9 @@ public final class ToolTestFixture {
         WhitelistSandbox.class,
         () ->
             new WhitelistSandbox(
-                tempDir.toString(), "echo,ls", "api.weather.com,api.duckduckgo.com"));
+                new FileSandboxProperties(List.of(tempDir.toString())),
+                new ShellSandboxProperties(List.of("echo", "ls")),
+                new HttpSandboxProperties(List.of("api.weather.com", "api.duckduckgo.com"))));
     context.register(FileTools.class, ShellTools.class, HttpTools.class);
     context.register(InteractionTools.class, WebSearchTools.class, DemoCompanyTool.class);
     context.register(ToolConfiguration.class);

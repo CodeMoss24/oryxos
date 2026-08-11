@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.oryxos.core.tool.OryxTool;
 import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.ToolTestFixture;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,12 +38,15 @@ class ShellToolsTest {
   }
 
   @Test
-  @DisplayName("shell:越界会被拦")
-  void shellBlocked() {
-    ToolResult r = execute("{\"command\":\"rm -rf /\"}");
+  @DisplayName("shell:越界会被拦——白名单外 rm 未执行,目标文件仍在")
+  void shellBlocked() throws Exception {
+    // 先放一个目标文件,再执行白名单外命令(rm 不在 [echo,ls] 白名单):被拦后文件必须原样仍在
+    Path victim = tempDir.resolve("victim.txt");
+    Files.writeString(victim, "precious");
+    ToolResult r = execute("{\"command\":\"rm -rf \\\"" + victim + "\\\"\"}");
     assertFalse(r.success(), "白名单外命令必须失败");
-    assertTrue(
-        r.errorMessage().contains("not allowed"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
+    assertTrue(r.errorMessage().contains("不在白名单内"), () -> "错误信息应含拦截说明, got: " + r.errorMessage());
+    assertTrue(Files.exists(victim), "白名单外命令未执行,目标文件仍在");
   }
 
   private static ToolResult execute(String inputJson) {
