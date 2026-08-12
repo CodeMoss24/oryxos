@@ -1,5 +1,6 @@
 package com.oryxos.core.profile;
 
+import com.oryxos.core.scheduler.ScheduleConfig;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,7 @@ public class Profile {
   private List<String> mcpServers = new ArrayList<>();
   private List<ChannelBinding> channels = new ArrayList<>();
   private List<NotifyChannel> notifyChannels = new ArrayList<>();
-  private List<Schedule> schedules = new ArrayList<>();
+  private List<ScheduleConfig> schedules = new ArrayList<>();
   private List<String> bootstrap = new ArrayList<>();
   private Settings settings = new Settings();
 
@@ -30,8 +31,6 @@ public class Profile {
   public record ChannelBinding(String name, Map<String, Object> config) {}
 
   public record NotifyChannel(String type, Map<String, String> config) {}
-
-  public record Schedule(String cron, String zone, String message) {}
 
   public static class Settings {
     private int maxIterations = 10;
@@ -126,11 +125,11 @@ public class Profile {
     this.notifyChannels = notifyChannels;
   }
 
-  public List<Schedule> getSchedules() {
+  public List<ScheduleConfig> getSchedules() {
     return schedules;
   }
 
-  public void setSchedules(List<Schedule> schedules) {
+  public void setSchedules(List<ScheduleConfig> schedules) {
     this.schedules = schedules;
   }
 

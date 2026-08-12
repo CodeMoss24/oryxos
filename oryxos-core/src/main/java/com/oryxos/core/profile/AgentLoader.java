@@ -1,5 +1,6 @@
 package com.oryxos.core.profile;
 
+import com.oryxos.core.scheduler.ScheduleConfig;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -113,6 +114,22 @@ public class AgentLoader {
         channels.add(new Profile.NotifyChannel(type, config));
       }
       profile.setNotifyChannels(channels);
+    }
+
+    // schedules: [{id, cron, zone, message}, ...]——缺 id 的条目没有锁键可用,
+    // 属配置错误,跳过该条并记日志,不阻断启动(与 notify_channels 同样的失败策略)
+    List<Map<String, String>> rawSchedules = (List<Map<String, String>>) front.get("schedules");
+    if (rawSchedules != null) {
+      List<ScheduleConfig> schedules = new ArrayList<>();
+      for (Map<String, String> sc : rawSchedules) {
+        String id = sc.get("id");
+        if (id == null || id.isBlank()) {
+          System.err.println("[AgentLoader] schedule without id skipped for agent " + name);
+          continue;
+        }
+        schedules.add(new ScheduleConfig(id, sc.get("cron"), sc.get("zone"), sc.get("message")));
+      }
+      profile.setSchedules(schedules);
     }
 
     return profile;

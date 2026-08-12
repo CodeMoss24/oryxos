@@ -3,6 +3,7 @@ package com.oryxos.core.profile;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
+import com.oryxos.core.scheduler.ScheduleConfig;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
@@ -132,6 +133,149 @@ class AgentLoaderTest {
     var loader = new AgentLoader(agentsDir.resolve("nonexistent"));
     var registry = new ProfileRegistry();
     assertThat(loader.scanAndRegister(registry)).isEqualTo(0);
+  }
+
+  @Test
+  @DisplayName("frontmatter schedules 全字段解析为 ScheduleConfig")
+  void schedulesFullFieldParse() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "weather",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                schedules:
+                  - id: daily-weather
+                    cron: "0 9 * * *"
+                    zone: Asia/Shanghai
+                    message: 到点了，查一下今天的天气
+                ---
+                # Weather Agent
+                """);
+
+    loader.scanAndRegister(registry);
+    var profile = registry.find("weather").orElseThrow();
+
+    assertThat(profile.getSchedules()).hasSize(1);
+    var sc = profile.getSchedules().get(0);
+    assertThat(sc.id()).isEqualTo("daily-weather");
+    assertThat(sc.cron()).isEqualTo("0 9 * * *");
+    assertThat(sc.zone()).isEqualTo("Asia/Shanghai");
+    assertThat(sc.message()).isEqualTo("到点了，查一下今天的天气");
+  }
+
+  @Test
+  @DisplayName("schedules 条目缺 id 被跳过，其余条目照常解析")
+  void scheduleWithoutIdIsSkippedOthersSurvive() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "weather",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                schedules:
+                  - cron: "0 9 * * *"
+                  - id: hourly-digest
+                    cron: "0 * * * *"
+                    message: 报一下进展
+                ---
+                # Weather Agent
+                """);
+
+    loader.scanAndRegister(registry);
+    var profile = registry.find("weather").orElseThrow();
+
+    assertThat(profile.getSchedules()).hasSize(1);
+    assertThat(profile.getSchedules().get(0).id()).isEqualTo("hourly-digest");
+  }
+
+  @Test
+  @DisplayName("schedules 条目缺 zone 存 null，缺 message 存 null")
+  void scheduleWithoutZoneKeepsNull() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "weather",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                schedules:
+                  - id: daily-weather
+                    cron: "0 9 * * *"
+                ---
+                # Weather Agent
+                """);
+
+    loader.scanAndRegister(registry);
+    var profile = registry.find("weather").orElseThrow();
+
+    assertThat(profile.getSchedules()).hasSize(1);
+    var sc = profile.getSchedules().get(0);
+    assertThat(sc.zone()).isNull();
+    assertThat(sc.message()).isNull();
+  }
+
+  @Test
+  @DisplayName("一个 Agent 声明多条 schedules 全部解析")
+  void multipleSchedulesAllParsed() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "weather",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                schedules:
+                  - id: daily-weather
+                    cron: "0 9 * * *"
+                    zone: Asia/Shanghai
+                    message: 早报
+                  - id: evening-digest
+                    cron: "0 18 * * *"
+                    zone: Asia/Shanghai
+                    message: 晚报
+                ---
+                # Weather Agent
+                """);
+
+    loader.scanAndRegister(registry);
+    var profile = registry.find("weather").orElseThrow();
+
+    assertThat(profile.getSchedules()).hasSize(2);
+    assertThat(profile.getSchedules().stream().map(ScheduleConfig::id))
+        .containsExactly("daily-weather", "evening-digest");
+  }
+
+  @Test
+  @DisplayName("无 schedules 键时为空列表")
+  void noSchedulesKeyYieldsEmptyList() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "weather",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                ---
+                # Weather Agent
+                """);
+
+    loader.scanAndRegister(registry);
+    var profile = registry.find("weather").orElseThrow();
+
+    assertThat(profile.getSchedules()).isEmpty();
   }
 
   @Test
