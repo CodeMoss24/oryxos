@@ -27,6 +27,11 @@ public class MemoryServiceImpl implements MemoryService {
   }
 
   @Override
+  public String readAll() {
+    return longTermMemoryStore.readAll();
+  }
+
+  @Override
   public void remember(String content, MemoryScope scope) {
     MemoryScope effective = scope == null ? MemoryScope.ARCHIVAL : scope; // 缺省写归档——契约三
     longTermMemoryStore.append(content, effective);

@@ -14,6 +14,9 @@ public interface MemoryService {
   /** 返回长期记忆上下文:核心区全量 + 归档区截断后,供组装 system prompt 注入。 */
   String buildContext(Session session);
 
+  /** 返回长期记忆完整数据(全文、不截断),供管理台等运维查看入口使用;注入视图截断策略不受影响。 */
+  String readAll();
+
   /** 追加一条长期记忆到指定分区。scope 由调用方显式指定,系统不猜。 */
   void remember(String content, MemoryScope scope);
 

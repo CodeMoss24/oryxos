@@ -70,6 +70,46 @@ class MemoryStoreContractTest {
 
   @ParameterizedTest
   @MethodSource("allStores")
+  @DisplayName("readAll返回完整数据_归档区超阈值也不截断")
+  void readAllReturnsCompleteData_noTruncation(LongTermMemoryStore memory) {
+    memory.append("核心一条", MemoryScope.CORE);
+    for (int i = 0; i < 500; i++) {
+      memory.append("归档流水 " + i, MemoryScope.ARCHIVAL); // 灌到远超 load() 的截断阈值
+    }
+
+    String all = memory.readAll();
+
+    // readAll 是运维查看入口:完整数据,load() 会裁掉的最早归档也必须在场
+    assertThat(all).contains("核心一条");
+    assertThat(all).contains("归档流水 0");
+    assertThat(all).contains("归档流水 499");
+  }
+
+  @ParameterizedTest
+  @MethodSource("allStores")
+  @DisplayName("readAll_空库返回空串不抛异常")
+  void readAllReturnsEmptyOnEmptyStore(LongTermMemoryStore memory) {
+    assertThat(memory.readAll()).isNotNull();
+  }
+
+  @ParameterizedTest
+  @MethodSource("allStores")
+  @DisplayName("readAll与load并存互不影响_注入截断策略不变")
+  void readAllCoexistsWithLoad_injectionViewUnchanged(LongTermMemoryStore memory) {
+    memory.append("核心一条", MemoryScope.CORE);
+    for (int i = 0; i < 500; i++) {
+      memory.append("归档流水 " + i, MemoryScope.ARCHIVAL);
+    }
+
+    String loaded = memory.load(); // 注入视图:仍按既有截断策略
+    String all = memory.readAll(); // 运维视图:完整
+
+    assertThat(loaded).doesNotContain("归档流水 0");
+    assertThat(all).contains("归档流水 0");
+  }
+
+  @ParameterizedTest
+  @MethodSource("allStores")
   @DisplayName("scope路由到正确分区_核心区内容不进检索结果")
   void scopeRoutesToCorrectSection_coreNotInRecall(LongTermMemoryStore memory) {
     memory.append("核心区独有内容", MemoryScope.CORE);

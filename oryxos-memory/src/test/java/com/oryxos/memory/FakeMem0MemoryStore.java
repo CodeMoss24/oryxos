@@ -32,6 +32,12 @@ class FakeMem0MemoryStore implements LongTermMemoryStore {
   }
 
   @Override
+  public String readAll() {
+    // 运维视图:完整数据,不套注入视图的截断
+    return (String.join("\n", core) + "\n" + String.join("\n", archival)).trim();
+  }
+
+  @Override
   public List<String> recallByKeyword(String keyword) {
     return archival.stream().filter(line -> line.contains(keyword)).toList(); // 契约四
   }

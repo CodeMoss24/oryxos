@@ -72,7 +72,12 @@ class ProviderServiceTest {
   }
 
   private ProviderService makeService(Map<String, ChatModel> models) {
-    return new ProviderService(models, Map.of(), restClientBuilder, adapter, auditRepository);
+    return makeService(models, Map.of());
+  }
+
+  private ProviderService makeService(
+      Map<String, ChatModel> models, Map<String, ProviderProperties.ProviderEntry> configs) {
+    return new ProviderService(models, configs, restClientBuilder, adapter, auditRepository);
   }
 
   @Test
@@ -166,5 +171,86 @@ class ProviderServiceTest {
     assertThat(entity.isSuccess()).isTrue();
     assertThat(entity.getProvider()).isEqualTo("deepseek");
     assertThat(entity.getPromptTokens()).isEqualTo(10);
+  }
+
+  @Test
+  @DisplayName("connectivity_探测成功返回true")
+  void connectivityProbeSucceedsReturnsTrue() {
+    var configs =
+        Map.of(
+            "deepseek",
+            new ProviderProperties.ProviderEntry("deepseek", "k", "https://api.deepseek.com"));
+    stubProbeChain();
+
+    var service = makeService(Map.of("deepseek", deepseekModel), configs);
+
+    assertThat(service.connectivity()).containsEntry("deepseek", true);
+  }
+
+  @Test
+  @DisplayName("connectivity_4xx响应也算地址可达")
+  void connectivity4xxResponseCountsReachable() {
+    var configs =
+        Map.of(
+            "deepseek",
+            new ProviderProperties.ProviderEntry("deepseek", "k", "https://api.deepseek.com"));
+    RestClient.ResponseSpec responseSpec = stubProbeChain();
+    org.mockito.Mockito.doThrow(
+            new org.springframework.web.client.HttpClientErrorException(
+                org.springframework.http.HttpStatus.NOT_FOUND))
+        .when(responseSpec)
+        .toBodilessEntity();
+
+    var service = makeService(Map.of("deepseek", deepseekModel), configs);
+
+    assertThat(service.connectivity()).containsEntry("deepseek", true);
+  }
+
+  @Test
+  @DisplayName("connectivity_连接失败返回false不抛异常")
+  void connectivityConnectionFailureReturnsFalse() {
+    var configs =
+        Map.of(
+            "deepseek",
+            new ProviderProperties.ProviderEntry("deepseek", "k", "https://api.deepseek.com"));
+    RestClient.ResponseSpec responseSpec = stubProbeChain();
+    when(responseSpec.toBodilessEntity())
+        .thenThrow(new org.springframework.web.client.ResourceAccessException("connect timeout"));
+
+    var service = makeService(Map.of("deepseek", deepseekModel), configs);
+
+    assertThat(service.connectivity()).containsEntry("deepseek", false);
+  }
+
+  @Test
+  @DisplayName("connectivity_未配置任何provider返回空Map不抛异常")
+  void connectivityNoProvidersReturnsEmptyMap() {
+    var service = makeService(Map.of("deepseek", deepseekModel));
+
+    assertThat(service.connectivity()).isEmpty();
+    verifyNoInteractions(restClientBuilder);
+  }
+
+  /**
+   * 把探测用的 builder 链(clone→requestFactory→baseUrl→build→get→retrieve)stub 成返回 200。
+   *
+   * @return ResponseSpec,供用例覆写 toBodilessEntity 的行为
+   */
+  private RestClient.ResponseSpec stubProbeChain() {
+    RestClient.Builder probeBuilder = org.mockito.Mockito.mock(RestClient.Builder.class);
+    RestClient.RequestHeadersUriSpec<?> spec =
+        org.mockito.Mockito.mock(RestClient.RequestHeadersUriSpec.class);
+    RestClient.ResponseSpec responseSpec = org.mockito.Mockito.mock(RestClient.ResponseSpec.class);
+    when(restClientBuilder.clone()).thenReturn(probeBuilder);
+    when(probeBuilder.requestFactory(any())).thenReturn(probeBuilder);
+    when(probeBuilder.baseUrl(anyString())).thenReturn(probeBuilder);
+    when(probeBuilder.build()).thenReturn(restClient);
+    org.mockito.Mockito.doReturn(spec).when(restClient).get(); // doReturn 规避通配符捕获检查
+    when(spec.retrieve()).thenReturn(responseSpec);
+    // lenient:个别用例会用 doThrow 覆写这条 stub
+    lenient()
+        .when(responseSpec.toBodilessEntity())
+        .thenReturn(org.springframework.http.ResponseEntity.ok().build());
+    return responseSpec;
   }
 }

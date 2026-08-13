@@ -20,6 +20,6 @@ public class MemoryApiController {
 
   @GetMapping
   public ApiResponse<Map<String, String>> get() {
-    return ApiResponse.ok(Map.of("memory", memoryService.buildContext(null)));
+    return ApiResponse.ok(Map.of("memory", memoryService.readAll()));
   }
 }

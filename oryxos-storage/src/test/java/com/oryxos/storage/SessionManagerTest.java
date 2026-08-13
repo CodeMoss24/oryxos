@@ -69,4 +69,27 @@ class SessionManagerTest {
   void getMissingReturnsEmpty() {
     assertThat(sessionManager.get("cli:no-such-user:default")).isEmpty();
   }
+
+  @Test
+  @DisplayName("listAll_空库返回空列表")
+  void listAllReturnsEmptyOnEmptyDatabase() {
+    assertThat(sessionManager.listAll()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("listAll_按lastActiveAt倒序返回全部会话")
+  void listAllReturnsSessionsOrderedByLastActiveAtDesc() {
+    var older = sessionManager.getOrCreate("cli", "wang", "default");
+    var newer = sessionManager.getOrCreate("web", "li", "weather");
+    // 显式钉死时间,不依赖创建时序的时钟精度
+    older.setLastActiveAt(java.time.Instant.parse("2026-08-13T00:00:00Z"));
+    newer.setLastActiveAt(java.time.Instant.parse("2026-08-13T01:00:00Z"));
+    sessionManager.save(older);
+    sessionManager.save(newer);
+
+    var list = sessionManager.listAll();
+    assertThat(list).hasSize(2);
+    assertThat(list.get(0).getSessionId()).isEqualTo(newer.getSessionId());
+    assertThat(list.get(1).getSessionId()).isEqualTo(older.getSessionId());
+  }
 }

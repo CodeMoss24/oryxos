@@ -193,7 +193,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 
 ## 八、API(Web Service)
 
-核心阶段 10 个 REST 端点,**只做查询和调用,不做创建**:
+核心阶段 10 个 REST 端点(会话列表为只读扩展,共 11 个),**只做查询和调用,不做创建**:
 
 | 类别 | 端点 | 说明 |
 |------|------|------|
@@ -203,7 +203,8 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 | 会话管理 | `DELETE /api/v1/sessions/{id}` | 归档会话 |
 | Agent 调用 | `POST /api/v1/agents/{name}/invoke` | 无状态调用 |
 | Profile 信息 | `GET /api/v1/profiles` | 列 Profile |
-| Memory 操作 | `GET /api/v1/memory` | 查长期记忆 |
+| 会话管理 | `GET /api/v1/sessions` | 会话列表(只读扩展) |
+| Memory 操作 | `GET /api/v1/memory` | 长期记忆全文(不截断) |
 | Tool 信息 | `GET /api/v1/tools` | 列可用 Tool |
 | 系统状态 | `GET /api/v1/health` | 健康检查 |
 | 系统状态 | `GET /api/v1/info` | 运行信息 |

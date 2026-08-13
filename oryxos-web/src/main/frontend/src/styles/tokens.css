@@ -1,0 +1,33 @@
+/* OryxOS 管理台设计 token —— 值取自 website/.vitepress/theme/custom.css,与官网首页同源。
+   主色 #FF6B2B / hover #FF8C42 / 强调 #E8450A;边框 #1a1a1a;灰阶 #eeeeee/#999/#555。 */
+:root {
+  --bg: #000000;
+  --bg-soft: #080808;
+  --bg-mute: #0d0d0d;
+  --border: #1a1a1a;
+  --brand: #ff6b2b;
+  --brand-2: #ff8c42;
+  --brand-strong: #e8450a;
+  --brand-soft: rgba(255, 107, 43, 0.12);
+  --text-1: #eeeeee;
+  --text-2: #999999;
+  --text-3: #555555;
+  --ok: #4ade80;
+  --err: #f87171;
+  --warn: #ff6b2b;
+  --font-base: 'Space Grotesk', 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --radius: 5px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-base);
+  font-size: 14px;
+}
+
+code, .mono { font-family: var(--font-mono); }

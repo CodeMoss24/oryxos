@@ -4,8 +4,9 @@ package com.oryxos.web;
 public enum ErrorCode {
   BAD_REQUEST(400, "请求参数错误"),
   NOT_FOUND(404, "资源不存在"),
-  INTERNAL_ERROR(500, "服务器内部错误"),
+  INTERNAL_ERROR(500, "内部错误"),
   SERVICE_UNAVAILABLE(503, "服务暂不可用"),
+  GATEWAY_TIMEOUT(504, "调用超时"),
   SANDBOX_VIOLATION(4031, "沙箱安全限制"),
   TOOL_EXECUTION_ERROR(5001, "工具执行失败"),
   LLM_CALL_ERROR(5002, "LLM 调用失败");

@@ -56,6 +56,12 @@ public class Mem0MemoryStore implements LongTermMemoryStore {
   }
 
   @Override
+  public String readAll() {
+    // 全量原样读取:不带 scope/分页参数,取该用户全部记忆(注入视图的截断策略保留在 load())
+    return getRaw("/v1/memories/?user_id=" + userId);
+  }
+
+  @Override
   public List<String> recallByKeyword(String keyword) {
     // Mem0 的 search 是语义检索,比关键词强——契约四的"加强版实现"
     String raw = getRaw("/v1/memories/search?query=" + keyword + "&user_id=" + userId);

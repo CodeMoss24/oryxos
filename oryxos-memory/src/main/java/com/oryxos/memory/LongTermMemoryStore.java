@@ -26,6 +26,9 @@ public interface LongTermMemoryStore {
   /** 返回核心记忆区全量 + 归档记忆区截断后的内容。核心区永远完整不截断。 */
   String load();
 
+  /** 返回长期记忆完整数据(原样读取、不截断),供管理台等运维查看入口使用;不影响 load 的注入视图。 */
+  String readAll();
+
   /** 按关键词检索,只在归档记忆区做匹配,核心区不参与检索(它本来就会被全量注入)。 */
   List<String> recallByKeyword(String keyword);
 }

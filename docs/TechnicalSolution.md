@@ -405,14 +405,15 @@ Web Service 是 OryxOS 的对外完整门面，业务系统通过 REST API 接�
 
 **OpenAPI 文档模块。** 通过 `springdoc-openapi` 自动生成 OpenAPI 3.0 文档，暴露在 `/swagger-ui`。
 
-### 7.2 核心阶段 10 个端点
+### 7.2 核心阶段 10 个端点（会话列表为只读扩展，共 11 个）
 
-**会话管理（4 个）：**
+**会话管理（5 个）：**
 
 1. `POST /api/v1/sessions`（创建）
 2. `POST /api/v1/sessions/{id}/messages`（发消息）
 3. `GET /api/v1/sessions/{id}`（查历史）
 4. `DELETE /api/v1/sessions/{id}`（归档）
+5. `GET /api/v1/sessions`（会话列表——只读扩展，供管理台"会话列表"页）
 
 **Agent 调用（1 个）：**
 
@@ -421,7 +422,7 @@ Web Service 是 OryxOS 的对外完整门面，业务系统通过 REST API 接�
 **Profile / Memory / Tool 信息（3 个）：**
 
 1. `GET /api/v1/profiles`
-2. `GET /api/v1/memory`
+2. `GET /api/v1/memory`（长期记忆全文，不截断）
 3. `GET /api/v1/tools`
 
 **系统状态（2 个）：**

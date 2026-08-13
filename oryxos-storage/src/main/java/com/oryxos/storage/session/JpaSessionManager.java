@@ -4,6 +4,8 @@ import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
 import com.oryxos.storage.entity.SessionEntity;
 import com.oryxos.storage.repository.SessionRepository;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +42,16 @@ public class JpaSessionManager implements SessionManager {
   public void save(Session session) {
     SessionEntity entity = sessionCodec.toEntity(session);
     sessionRepository.save(entity);
+  }
+
+  @Override
+  public List<Session> listAll() {
+    return sessionRepository.findAll().stream()
+        .map(sessionCodec::fromEntity)
+        .sorted(
+            Comparator.comparing(
+                Session::getLastActiveAt, Comparator.nullsLast(Comparator.reverseOrder())))
+        .toList();
   }
 
   private String buildSessionId(String channel, String user, String profileName) {

@@ -1,6 +1,7 @@
 package com.oryxos.core.react;
 
 import com.oryxos.core.profile.Profile;
+import java.util.Map;
 
 /**
  * LLM 调用端口(端口与适配器模式)。 实现在 oryxos-provider 模块,基于 Spring AI Alibaba 的 ChatModel。
@@ -18,4 +19,7 @@ public interface ProviderPort {
    * @return LLM 响应(文本 + Tool 调用请求 + token 用量)
    */
   LlmResponse chat(String sessionId, Profile profile, Prompt prompt);
+
+  /** 各 Provider 的实时连通状态(带超时轻量探测,失败/未配置为 false)。供运行信息端点等使用,不抛异常。 */
+  Map<String, Boolean> connectivity();
 }

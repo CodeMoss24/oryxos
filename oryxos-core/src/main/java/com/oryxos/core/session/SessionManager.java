@@ -1,5 +1,6 @@
 package com.oryxos.core.session;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -18,4 +19,7 @@ public interface SessionManager {
 
   /** 持久化会话(含对话历史 messages_json)。 */
   void save(Session session);
+
+  /** 列出全部会话,按 lastActiveAt 倒序。供管理台会话列表等只读查询。 */
+  List<Session> listAll();
 }

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 128" role="img" aria-label="OryxOS">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C42"/>
+      <stop offset="50%" stop-color="#FF6B2B"/>
+      <stop offset="100%" stop-color="#E8450A"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(12,8)">
+    <path d="M 56 22 A 38 38 0 0 1 94 60 A 38 38 0 0 1 56 98 A 38 38 0 0 1 18 60 A 38 38 0 0 1 44 24"
+          fill="none" stroke="url(#g)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M 74 36 C 78 28, 84 14, 82 6 C 80 0, 76 2, 74 10 C 72 18, 72 28, 72 36 Z"
+          fill="url(#g)"/>
+    <circle cx="56" cy="60" r="7" fill="url(#g)"/>
+    <circle cx="56" cy="60" r="26" fill="none" stroke="url(#g)" stroke-width="1.5" opacity="0.4"/>
+  </g>
+
+  <text x="148" y="84"
+        font-family="'Space Grotesk', 'Inter', 'Segoe UI', 'PingFang SC', Arial, sans-serif"
+        font-size="54" font-weight="700" letter-spacing="-1"
+        fill="#FF6B2B"
+        text-rendering="geometricPrecision">Oryx<tspan font-weight="400" fill="#FF8C42">OS</tspan></text>
+</svg>

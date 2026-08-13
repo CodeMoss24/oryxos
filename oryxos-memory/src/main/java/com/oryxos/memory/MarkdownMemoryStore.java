@@ -64,6 +64,16 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   }
 
   @Override
+  public synchronized String readAll() {
+    try {
+      if (!Files.exists(memoryFile)) return "";
+      return Files.readString(memoryFile); // 原样全文,不做分区提取与截断
+    } catch (IOException e) {
+      return "";
+    }
+  }
+
+  @Override
   public synchronized List<String> recallByKeyword(String keyword) {
     try {
       if (!Files.exists(memoryFile)) return List.of();

@@ -11,6 +11,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import picocli.CommandLine;
 import picocli.spring.boot.autoconfigure.PicocliAutoConfiguration;
 
@@ -23,9 +24,11 @@ import picocli.spring.boot.autoconfigure.PicocliAutoConfiguration;
  * <p>轻命令集:init / status / profile / provider / tool / session 以及无参数(打印 usage)。 重命令集:chat / serve /
  * gateway。
  */
+// @EnableScheduling:提供 AgentScheduler(25 节)依赖的 TaskScheduler Bean——26 节 WebSmokeIT 首跑暴露该装配缺口
 @SpringBootApplication(scanBasePackages = "com.oryxos", exclude = PicocliAutoConfiguration.class)
 @EnableJpaRepositories(basePackages = "com.oryxos.storage.repository")
 @EntityScan(basePackages = "com.oryxos.storage.entity")
+@EnableScheduling
 public class OryxOsApplication implements CommandLineRunner {
 
   /** 不需要 Spring 上下文的命令前缀(直接走文件/配置,启动快) */

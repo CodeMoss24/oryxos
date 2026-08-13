@@ -1,10 +1,16 @@
 <!--
   Sync Impact Report:
-  - Version: 0.0.0 → 1.0.0 (initial ratification)
-  - Modified principles: none (first version)
-  - Added: 9 core principles, technical constraints, development workflow, governance
-  - Removed: none
-  - Deferred TODOs: none
+  - Version: 1.0.0 → 1.1.0 (minor)
+  - Amendment 记录(人类维护者授意,2026-08-13,Lesson 26):
+    - 修改内容:"核心阶段 Web API 边界"与"实施节奏"中"10 个 REST 端点"的表述改为"核心阶段 10 个
+      REST 端点(会话列表为只读扩展,共 11 个)"。
+    - 理由:第 26 节管理台"会话列表"页需要集合数据,课件管理台提示词要求 GET /api/v1/sessions;
+      该端点为只读查询,不违反"只查询不做创建"的边界精神。
+    - 影响范围:Web API 端点计数从 10 增至 11;TechnicalSolution §7.2、CLAUDE.md 同步修正。
+  - Modified principles: 核心阶段 Web API 边界(计数澄清)、实施节奏(第三周表述)
+  - Added: 无
+  - Removed: 无
+  - Deferred TODOs: 无
 -->
 
 # OryxOS Constitution
@@ -87,7 +93,7 @@ Sandbox、NotifyChannelAdapter、LongTermMemoryStore 等关键抽象必须先定
 - Agent 子资源按渐进式披露原则，经 `read_file`/`shell` 按需取用
 
 ### 核心阶段 Web API 边界
-核心阶段只做 10 个 REST 端点的查询和调用，不做创建。核心阶段不做：认证、流式 SSE、WebSocket、RBAC、限流、Agent 目录上传、Scheduler 运行时增删、Memory append/clear/search。以上全部放扩展阶段。
+核心阶段只做 10 个 REST 端点的查询和调用（会话列表为只读扩展，共 11 个端点），不做创建。核心阶段不做：认证、流式 SSE、WebSocket、RBAC、限流、Agent 目录上传、Scheduler 运行时增删、Memory append/clear/search。以上全部放扩展阶段。
 
 ### 运行环境约束
 - 操作系统：Linux 主流发行版（Ubuntu 22.04+ / CentOS 8+ / Debian 11+ / Alibaba Cloud Linux 3 / Rocky Linux）
@@ -109,7 +115,7 @@ Sandbox、NotifyChannelAdapter、LongTermMemoryStore 等关键抽象必须先定
 ### 实施节奏（4周 × 3小时 = 12小时）
 1. **第一周**：对接 LLM + ReAct 循环 → `oryxos chat` 多轮对话，Agent 调 HTTP Tool 完成天气查询
 2. **第二周**：Memory + Tool 体系 → Agent 记住偏好、调文件/MCP server
-3. **第三周**：Web Service → 10 个 REST 端点完整可用
+3. **第三周**：Web Service → 核心阶段端点（含会话列表只读扩展）完整可用
 4. **第四周**：多 Agent 演示 + 定时任务 + 工程化收尾 → 三个 Demo 全跑通
 
 ### 常见陷阱清单
@@ -134,4 +140,4 @@ Sandbox、NotifyChannelAdapter、LongTermMemoryStore 等关键抽象必须先定
 6. **`AGENT.md` 与 Agent 目录**：Agent 目录的 `AGENT.md` 正文由 `ContextLoader` 注入 system prompt，不进 `ToolRegistry`。Agent 不是 Tool，Tool 不是 Agent，此边界不可模糊。
 7. **执行监督**：所有 AI agent 在本仓库工作前必须阅读本宪法。发现违反宪法的代码或行为，必须立即指出并阻止。
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-01 | **Last Amended**: 2026-08-01
+**Version**: 1.1.0 | **Ratified**: 2026-08-01 | **Last Amended**: 2026-08-13

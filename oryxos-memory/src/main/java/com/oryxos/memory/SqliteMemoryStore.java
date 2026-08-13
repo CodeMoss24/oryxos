@@ -45,6 +45,15 @@ public class SqliteMemoryStore implements LongTermMemoryStore {
   }
 
   @Override
+  public String readAll() {
+    // 全量原样读取:核心+归档所有条目,不加 LIMIT(截断是注入视图的事,不是数据的事)
+    return render(
+        repository.findAll(
+            org.springframework.data.domain.Sort.by(
+                org.springframework.data.domain.Sort.Direction.DESC, "id")));
+  }
+
+  @Override
   public List<String> recallByKeyword(String keyword) {
     return repository.searchArchival("%" + keyword + "%").stream()
         .map(MemoryEntryEntity::getContent)

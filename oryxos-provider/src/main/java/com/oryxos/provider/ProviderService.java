@@ -19,7 +19,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * ProviderService 模块。统一管理所有 LLM Provider,对 ReAct 循环屏蔽不同 LLM 厂商的差异。
@@ -55,6 +58,42 @@ public class ProviderService implements ProviderPort {
     this.restClientBuilder = restClientBuilder;
     this.toolSchemaAdapter = toolSchemaAdapter;
     this.llmCallRepository = llmCallRepository;
+  }
+
+  @Override
+  public Map<String, Boolean> connectivity() {
+    Map<String, Boolean> result = new java.util.LinkedHashMap<>();
+    providerConfigs.forEach((name, entry) -> result.put(name, probeReachable(entry.baseUrl())));
+    return result;
+  }
+
+  /** 对 base-url 做带超时轻量探测:任何 HTTP 响应(含 4xx/5xx)视为"地址可达",连接失败/超时视为断开。 */
+  private boolean probeReachable(String baseUrl) {
+    if (baseUrl == null || baseUrl.isBlank()) {
+      return false;
+    }
+    // TODO(Sandbox接线):涉外 HTTP IO 首行应过 Sandbox.enforce(HTTP_REQUEST, baseUrl)。
+    // 与 Mem0MemoryStore 同口径留接线位:oryxos-provider 不依赖 oryxos-tool,接线随 Sandbox 覆盖面扩展一起做。
+
+    // clone 而非直接改注入的 builder——探测的短超时不能污染 chat 路径共享的 builder
+    RestClient probeClient =
+        restClientBuilder.clone().requestFactory(probeRequestFactory()).baseUrl(baseUrl).build();
+    try {
+      probeClient.get().retrieve().toBodilessEntity();
+      return true;
+    } catch (RestClientResponseException e) {
+      return true; // 4xx/5xx 也是"地址可达"
+    } catch (RuntimeException e) {
+      log.debug("Provider connectivity probe failed for {}", baseUrl, e);
+      return false;
+    }
+  }
+
+  private ClientHttpRequestFactory probeRequestFactory() {
+    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    factory.setConnectTimeout(2000);
+    factory.setReadTimeout(2000);
+    return factory;
   }
 
   @Override
