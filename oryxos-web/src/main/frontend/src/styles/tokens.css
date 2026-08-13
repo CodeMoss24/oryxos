@@ -27,7 +27,9 @@ body {
   background: var(--bg);
   color: var(--text-1);
   font-family: var(--font-base);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
 code, .mono { font-family: var(--font-mono); }

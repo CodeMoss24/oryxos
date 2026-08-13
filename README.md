@@ -40,15 +40,34 @@ Agent runtime 是让单个 Agent 跑起来的执行内核，负责调用模型�
 
 ![OryxOS Architecture](docs/images/architecture.svg)
 
-OryxOS 是 Spring Boot 单体应用，三个触发入口（CLI / Web Service / AgentScheduler）汇入同一个 `AgentService`，由 **ReAct 循环** 驱动五大核心能力。
+OryxOS 是 Spring Boot 单体应用（JDK 21 + 虚拟线程），三个触发入口（CLI / Web Service / AgentScheduler 定时任务）汇入同一个 `AgentService`，由自实现的 **ReAct 循环** 驱动五大核心能力。
 
 | 能力 | 说明 |
 |------|------|
 | **对接 LLM** | Provider 抽象 + 显式映射，Agent 不感知具体厂商，运行时切换不锁定 |
 | **ReAct 循环** | Agent 大脑，自实现约数十行 Java，虚拟线程高并发，机制完全可控 |
 | **Memory 记忆** | MemoryService 统一门面，核心区全量注入 + 归档区关键词检索，三档后端可切换 |
-| **Tool 工具** | 9 个内置 Tool + Plugin 三档接入（零代码 MCP / 自写 MCP / @Tool Java Bean） |
-| **Web Service** | 10 个 REST 端点，所有能力通过 HTTP API 暴露，任何语言可集成 |
+| **Tool 工具** | 9 个内置 Tool + Plugin 三档接入（零代码 MCP / 自写 MCP / @Tool Java Bean），Sandbox 白名单兜底 |
+| **Web Service** | 11 个 REST 端点（10 核心 + 会话列表只读扩展），所有能力通过 HTTP API 暴露，任何语言可集成 |
+
+> **审计 day one**：`llm_calls`、`tool_invocations` 从第一版起写入 SQLite——每一笔模型调用、每一次工具执行都留痕。
+
+---
+
+## 管理平台
+
+`serve` 启动后，一个内嵌的只读管理台随服务一起托管在 `/admin`（无需额外进程）：
+
+- **总览** — OryxOS 定位与五大能力预览
+- **Agent** — 当前注册的全部 Agent（一个目录 = 一个 Agent）
+- **会话列表** — 所有对话会话（CLI / Web / 定时任务共享同一存储）
+- **Tool 列表** — 已注册工具（内置 + MCP）
+- **长期记忆** — 记忆全文（运维视图，不截断）
+- **Sandbox 白名单** — 安全边界配置视图（接入中）
+- **Provider 列表** — 各 LLM Provider 实时连通状态
+- **运行状态** — 版本信息与系统状态
+
+配合 `swagger-ui`（`/swagger-ui.html`）的 OpenAPI 文档，全部 11 个端点一目了然。
 
 ---
 
@@ -56,22 +75,66 @@ OryxOS 是 Spring Boot 单体应用，三个触发入口（CLI / Web Service / A
 
 ### 环境要求
 
-- **JDK 21+**
-- **Maven 3.9+**
+- **JDK 21+**、**Maven 3.9+**
+- **Node.js 20+**（仅构建管理台前端时需要；产物随 fat JAR 分发）
 - Linux 主流发行版（Ubuntu 22.04+ / CentOS 8+ / Debian 11+）
 
-### 安装
+### 一键构建
 
 ```bash
 git clone git@github.com:CodeMoss24/oryxos.git
 cd oryxos
-mvn clean package
+mvn clean package            # 一条命令出全量 fat JAR（含管理台前端自动构建）
 ```
 
-### 初始化
+- 产物：`oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar`
+- 纯后端迭代可跳过前端构建：`mvn clean package -Dfrontend.skip=true`
+
+### 一键启动（Server + 管理台）
 
 ```bash
-oryxos init
+export DEEPSEEK_API_KEY=sk-xxx    # 只需一个 Provider 密钥即可启动
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve
+```
+
+启动后同一进程同时提供：
+
+| 入口 | 地址 |
+|------|------|
+| REST API | `http://localhost:8080/api/v1` |
+| 管理平台 | `http://localhost:8080/admin` |
+| OpenAPI 文档 | `http://localhost:8080/swagger-ui.html` |
+
+### 管理台开发模式（热更新）
+
+前端改 UI 时用开发模式：Vite dev server 从源码实时编译，改 `App.vue`/样式保存后浏览器自动刷新，不需要每次 `mvn package`。
+
+**前置条件**：后端 `serve` 先起（dev 只跑前端，`/api` 请求经代理转发到后端）：
+
+```bash
+# 终端 1：起后端（API + 数据源）
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve
+
+# 终端 2：起前端开发模式
+cd oryxos-web/src/main/frontend
+npm ci
+npm run dev                   # http://localhost:5173/admin/，改代码即时刷新
+```
+
+**端口被占怎么办**：默认代理指向 `http://localhost:8080`；如果 8080 被其他程序占用（如 IDE 的 node 服务），把后端起在别的端口并用环境变量覆盖代理目标：
+
+```bash
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve --server.port=8081
+cd oryxos-web/src/main/frontend
+ORYXOS_API_PROXY=http://localhost:8081 npm run dev
+```
+
+> 提示：IDE（VS Code / Trae 等）可能自动对 5173、8081 做端口转发并改写浏览器地址，属正常现象，不影响使用。开发模式下改完的源码仍需 `mvn package` 才会进入 fat JAR（生产形态由 `frontend-maven-plugin` 自动构建）。
+
+### 初始化工作区
+
+```bash
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar init
 ```
 
 创建 `.oryxos/` 工作区：
@@ -89,18 +152,17 @@ oryxos init
 ├── AGENTS.md          # Bootstrap：项目级 agent 行为说明
 ├── SOUL.md            # Bootstrap：默认 agent 人格
 ├── USER.md            # Bootstrap：用户偏好
-└── oryxos.db          # SQLite
+└── oryxos.db          # SQLite（会话 / 审计）
 ```
 
 ### 定义第一个 Agent
 
-```yaml
+`.oryxos/agents/daily-weather/AGENT.md`（frontmatter 即 Agent 配置，正文即任务指令）：
+
+```markdown
 ---
 name: daily-weather
 description: 每天早上查天气并推送穿搭建议
-identity:
-  agent_name: DailyWeather
-  prompt: 你是一个穿搭顾问助手
 provider:
   name: deepseek
   model: deepseek-chat
@@ -120,9 +182,9 @@ schedules:
 ### 三种运行模式
 
 ```bash
-oryxos chat --profile daily-weather   # 交互对话（开发调试）
-oryxos serve                           # 启动 REST API（默认 8080）
-oryxos gateway                         # 多渠道守护进程
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar chat --profile daily-weather   # 交互对话
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve                          # REST API + 管理台
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar gateway                        # 多渠道守护进程
 ```
 
 ---
@@ -134,11 +196,11 @@ OryxOS 是 Maven 多模块项目，9 个模块：
 | 模块 | 职责 |
 |------|------|
 | `oryxos-core` | 核心抽象：`OryxTool`、`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`AgentScheduler` |
-| `oryxos-provider` | ProviderService、Function Calling 适配、显式映射 |
+| `oryxos-provider` | ProviderService、Function Calling 适配、显式映射、连通探活 |
 | `oryxos-memory` | MemoryService 统一门面、三档后端（Markdown/SQLite/Mem0）、MemoryTools |
 | `oryxos-tool` | 内置 Tool、MCP Client、ToolRegistry、Sandbox、NotifyChannelAdapter |
 | `oryxos-channel-cli` | CliChannel、`oryxos chat` |
-| `oryxos-web` | WebServer、6 个 ApiController、GlobalExceptionHandler |
+| `oryxos-web` | WebServer、6 个 ApiController、GlobalExceptionHandler、管理台前端 |
 | `oryxos-storage` | SQLite 持久化、各 Repository |
 | `oryxos-cli` | Picocli 主入口、12 个子命令 |
 | `oryxos-boot` | Spring Boot 启动模块 |
@@ -198,5 +260,3 @@ OryxOS 是 Maven 多模块项目，9 个模块：
 ---
 
 ## License
-
-[Apache 2.0](LICENSE)

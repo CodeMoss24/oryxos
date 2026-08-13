@@ -1,17 +1,30 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import logo from './assets/logo.svg'
+import logoMark from './assets/logo-mark.svg'
 
 // ── 导航与页面状态 ─────────────────────────────────────────────
 const views = [
+  { key: 'overview', label: '总览' },
+  { key: 'agents', label: 'Agent' },
   { key: 'sessions', label: '会话列表' },
-  { key: 'profiles', label: 'Profile 列表' },
   { key: 'tools', label: 'Tool 列表' },
   { key: 'memory', label: '长期记忆' },
+  { key: 'sandbox', label: 'Sandbox 白名单' },
+  { key: 'providers', label: 'Provider 列表' },
   { key: 'status', label: '运行状态' },
 ]
-const active = ref('sessions')
+const active = ref('overview')
 const navOpen = ref(false) // 窄屏导航收起
+
+// ── 总览页静态预览数据(后续逐步接入 /info、/profiles 等动态数据) ──
+const capabilities = [
+  { name: '对接 LLM', desc: 'Provider 抽象 + 显式映射,多模型自由切换' },
+  { name: 'ReAct 循环', desc: '自实现 Reason + Act 引擎,不依赖外部 Agent 框架' },
+  { name: 'Memory 记忆', desc: '会话记忆 + 长期记忆,三档后端可切换' },
+  { name: 'Plugin Tool', desc: '内置工具 + MCP + 三档接入,零代码优先' },
+  { name: 'Web Service', desc: 'REST API 对外门面 + 本管理台' },
+]
+const stack = ['JDK 21', 'Spring Boot 3.x', 'Spring AI', 'SQLite', 'MCP', 'Picocli', 'Vue 3']
 
 // ── 统一取数:信封 {code, message, data};code≠200 或请求异常 → 把 message 交给页面 ──
 async function fetchData(url) {
@@ -42,11 +55,12 @@ function useView(url, { isList = false } = {}) {
   return reactive({ loading, error, data, load })
 }
 
-// ── 五个只读视图的数据源 ───────────────────────────────────────
+// ── 各视图的数据源 ─────────────────────────────────────────────
 const sessions = useView('/api/v1/sessions', { isList: true })
-const profiles = useView('/api/v1/profiles', { isList: true })
+const agents = useView('/api/v1/profiles', { isList: true }) // Agent 列表 = Profile 注册表
 const tools = useView('/api/v1/tools', { isList: true })
 const memory = useView('/api/v1/memory')
+const providers = useView('/api/v1/info') // Provider 列表取自 /info 的 providers 连通状态
 const status = useView('/api/v1/info')
 
 const loaded = ref(false)
@@ -54,21 +68,24 @@ onMounted(() => {
   if (!loaded.value) {
     loaded.value = true
     sessions.load()
-    profiles.load()
+    agents.load()
     tools.load()
     memory.load()
+    providers.load()
     status.load()
   }
 })
 
 const activeView = computed(() => {
   switch (active.value) {
-    case 'profiles':
-      return profiles
+    case 'agents':
+      return agents
     case 'tools':
       return tools
     case 'memory':
       return memory
+    case 'providers':
+      return providers
     case 'status':
       return status
     default:
@@ -93,8 +110,7 @@ function formatTime(ts) {
     <!-- 左侧竖直导航 -->
     <aside class="sidebar" :class="{ open: navOpen }">
       <div class="brand">
-        <img :src="logo" alt="OryxOS" class="brand-logo" />
-        <span class="brand-name">OryxOS 管理台</span>
+        <img :src="logoMark" alt="OryxOS" class="brand-logo" />
       </div>
       <nav class="nav">
         <button
@@ -116,8 +132,40 @@ function formatTime(ts) {
         <h1 class="page-title">{{ views.find(v => v.key === active).label }}</h1>
       </header>
 
+      <!-- 总览:静态预览信息,不依赖 API(后续逐步接入动态数据) -->
+      <div v-if="active === 'overview'" class="overview">
+        <div class="overview-hero">
+          <img :src="logoMark" alt="OryxOS" class="overview-logo" />
+          <div>
+            <h2 class="overview-title">OryxOS</h2>
+            <p class="overview-slogan">面向严监管企业的私有可审计 Agent OS</p>
+            <p class="overview-sub dim">Java 原生 · 部署在企业自己的服务器 · 数据不出企业</p>
+            <span class="badge badge-warn">静态预览 · 数据接入中</span>
+          </div>
+        </div>
+
+        <div class="overview-grid">
+          <div v-for="c in capabilities" :key="c.name" class="overview-card">
+            <div class="overview-card-name">{{ c.name }}</div>
+            <div class="overview-card-desc dim">{{ c.desc }}</div>
+          </div>
+        </div>
+
+        <div class="panel overview-stack">
+          <div class="overview-card-name">技术栈</div>
+          <div class="overview-stack-list">
+            <span v-for="t in stack" :key="t" class="overview-chip mono">{{ t }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sandbox 白名单:列表视图,内容接入中(暂无 API 数据源) -->
+      <div v-else-if="active === 'sandbox'" class="placeholder">
+        暂无数据(白名单配置视图接入中)
+      </div>
+
       <!-- 三态:加载中 -->
-      <div v-if="activeView.loading" class="placeholder">加载中…</div>
+      <div v-else-if="activeView.loading" class="placeholder">加载中…</div>
 
       <!-- 三态:请求错误(显示统一信封 message,不白屏) -->
       <div v-else-if="activeView.error" class="placeholder placeholder-error">
@@ -147,13 +195,13 @@ function formatTime(ts) {
         </tbody>
       </table>
 
-      <!-- Profile 列表 -->
-      <table v-else-if="active === 'profiles'" class="table">
+      <!-- Agent 列表(= Profile 注册表) -->
+      <table v-else-if="active === 'agents'" class="table">
         <thead>
           <tr><th>名称</th><th>描述</th></tr>
         </thead>
         <tbody>
-          <tr v-for="p in profiles.data" :key="p.name">
+          <tr v-for="p in agents.data" :key="p.name">
             <td class="mono">{{ p.name }}</td>
             <td class="dim">{{ p.description }}</td>
           </tr>
@@ -169,6 +217,19 @@ function formatTime(ts) {
           <tr v-for="t in tools.data" :key="t.name">
             <td class="mono">{{ t.name }}</td>
             <td class="dim">{{ t.description }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Provider 列表(连通状态取自 /info) -->
+      <table v-else-if="active === 'providers'" class="table">
+        <thead>
+          <tr><th>Provider</th><th>连通状态</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="(ok, name) in providers.data.providers || {}" :key="name">
+            <td class="mono">{{ name }}</td>
+            <td><span class="dot" :class="statusDot(ok)"></span>{{ statusText(ok) }}</td>
           </tr>
         </tbody>
       </table>
@@ -201,11 +262,11 @@ function formatTime(ts) {
 
 /* ── 侧边导航 ── */
 .sidebar {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   background: var(--bg);
   border-right: 1px solid var(--border);
-  padding: 20px 12px;
+  padding: 24px 14px;
   position: sticky;
   top: 0;
   height: 100vh;
@@ -213,32 +274,50 @@ function formatTime(ts) {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 8px 20px;
+  padding: 4px 12px 24px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
-.brand-logo { height: 28px; width: 28px; }
-.brand-name { font-weight: 600; color: var(--text-1); }
-.nav { display: flex; flex-direction: column; gap: 2px; }
+.brand-logo { height: 64px; width: 64px; }
+.nav { display: flex; flex-direction: column; gap: 3px; }
 .nav-item {
   text-align: left;
   background: none;
   border: none;
   color: var(--text-2);
-  padding: 9px 10px;
+  padding: 10px 12px;
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 14.5px;
   font-family: var(--font-base);
+  border-left: 2px solid transparent;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 .nav-item:hover { color: var(--brand-2); background: var(--bg-mute); }
-.nav-item.active { color: var(--brand); font-weight: 600; background: var(--bg-mute); }
+.nav-item.active {
+  color: var(--brand);
+  font-weight: 600;
+  background: var(--bg-mute);
+  border-left-color: var(--brand);
+}
 
 /* ── 内容区 ── */
-.content { flex: 1; padding: 24px 28px; min-width: 0; }
-.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.page-title { font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--text-1); }
+.content { flex: 1; padding: 28px 40px; min-width: 0; }
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0;
+  color: var(--text-1);
+}
 .nav-toggle {
   display: none;
   background: none;
@@ -250,16 +329,20 @@ function formatTime(ts) {
 }
 
 /* ── 表格 ── */
-.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .table th {
   text-align: left;
   color: var(--text-1);
   font-weight: 600;
-  padding: 10px 12px;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  padding: 12px 14px;
   border-bottom: 2px solid var(--border);
   background: var(--bg-soft);
 }
-.table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+.table td { padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+.table tbody tr { transition: background 0.12s; }
+.table tbody tr:hover { background: var(--bg-mute); }
 .table tr:last-child td { border-bottom: none; }
 .table td.mono { color: var(--text-1); }
 .dim { color: var(--text-2); }
@@ -281,35 +364,75 @@ function formatTime(ts) {
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 .status-row { display: flex; align-items: center; gap: 10px; }
-.status-row .dim { width: 110px; flex-shrink: 0; }
+.status-row .dim { width: 120px; flex-shrink: 0; }
 .memory {
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 24px;
   color: var(--text-2);
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.8;
   margin: 0;
+}
+
+/* ── 总览页 ── */
+.overview { display: flex; flex-direction: column; gap: 20px; }
+.overview-hero {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+.overview-logo { width: 88px; height: 88px; }
+.overview-title { font-size: 1.75rem; font-weight: 700; margin: 0; color: var(--text-1); }
+.overview-slogan { color: var(--brand); font-weight: 600; margin: 6px 0 2px; font-size: 15px; }
+.overview-sub { margin: 0 0 12px; font-size: 13.5px; }
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.overview-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.overview-card-name { color: var(--text-1); font-weight: 600; margin-bottom: 6px; }
+.overview-card-desc { font-size: 13px; }
+.overview-stack .overview-card-name { margin-bottom: 10px; }
+.overview-stack-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.overview-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--brand-2);
+  font-size: 12px;
+  background: var(--bg-mute);
 }
 
 /* ── 三态占位 ── */
 .placeholder {
-  padding: 60px 20px;
+  padding: 80px 24px;
   text-align: center;
   color: var(--text-3);
+  font-size: 15px;
   border: 1px dashed var(--border);
   border-radius: var(--radius);
 }
-.placeholder-error p { color: var(--err); margin: 0 0 12px; }
+.placeholder-error p { color: var(--err); margin: 0 0 14px; }
 .btn {
   background: var(--bg-mute);
   color: var(--brand-2);

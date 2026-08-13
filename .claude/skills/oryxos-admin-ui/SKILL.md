@@ -1,6 +1,6 @@
 ---
 name: oryxos-admin-ui
-description: 生成/修改 OryxOS 管理台前端页面(Vue 3 + Vite,深色+橙、只读、五页结构)。当用户说「生成管理台」「给管理台加一页」「管理台 UI」时使用。
+description: 生成/修改 OryxOS 管理台前端页面(Vue 3 + Vite,深色+橙、只读、总览+七页结构)。当用户说「生成管理台」「给管理台加一页」「管理台 UI」时使用。
 ---
 
 # OryxOS 管理台 UI 规范(项目内 skill)
@@ -39,10 +39,10 @@ OryxOS 管理台 = 托管在 `/admin` 的 Vue 3 + Vite 单页应用,只调 `/api
 ## 3. 布局与页面规范
 
 - 左侧竖直导航(深色,宽 ~200px,窄屏收起为顶部条)+ 右侧内容区;顶部 `/logo.svg` + "OryxOS 管理台"
-- 导航五项:会话列表(GET /api/v1/sessions)、Profile 列表(GET /api/v1/profiles)、Tool 列表(GET /api/v1/tools)、长期记忆(GET /api/v1/memory)、运行状态(GET /api/v1/info)
+- 导航八项:**总览**(静态预览信息,hero + 五大能力卡片 + 技术栈 chips,暂不调 API,逐步动态化)→ Agent(GET /api/v1/profiles,注册表即 Agent 列表)→ 会话列表(GET /api/v1/sessions)→ Tool 列表(GET /api/v1/tools)→ 长期记忆(GET /api/v1/memory)→ Sandbox 白名单(列表视图,暂无 API 数据源,静态空态占位)→ Provider 列表(取自 GET /api/v1/info 的 providers 连通状态)→ 运行状态(GET /api/v1/info)
 - **只读**:任何页面不得出现新建/编辑/删除按钮,不做任何 POST/PUT/DELETE
-- 表格深色、行分隔 `#1a1a1a`、表头文字 `#eeeeee`;记忆页渲染 Markdown 文本(等宽字体);状态页 provider 连通用"成功绿/断开红"圆点 + 标签
-- **三态占位必做**:加载中(骨架/loading 文案)、空数据(明确空态文案)、请求错误(显示信封 message + 重试按钮)——任何情况下不白屏
+- 表格深色、行分隔 `#1a1a1a`、表头文字 `#eeeeee`;记忆页渲染 Markdown 文本(等宽字体);状态页 provider 连通用"成功绿/断开红"圆点 + 标签;总览页卡片栅格 + 等宽 chips,hero 区主色仅用于 slogan 强调
+- **三态占位必做**:加载中(骨架/loading 文案)、空数据(明确空态文案)、请求错误(显示信封 message + 重试按钮)——任何情况下不白屏;静态页(如总览)置于三态判断之前渲染
 - 克制、留白足、圆角小(4–6px),与官网首页一个气质
 
 ## 4. 验收清单(生成后逐项自查)
