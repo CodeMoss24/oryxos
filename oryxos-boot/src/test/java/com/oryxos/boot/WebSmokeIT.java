@@ -92,4 +92,20 @@ class WebSmokeIT {
     assertThat(subpath.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(subpath.getBody()).contains("OryxOS 管理台");
   }
+
+  @Test
+  @DisplayName("管理台静态资产以正确内容类型直出(防 JS 被回落成 HTML 的回归)")
+  void adminAssetsServedWithJavaScriptContentType() {
+    ResponseEntity<String> page = rest.getForEntity("/admin/", String.class);
+    java.util.regex.Matcher matcher =
+        java.util.regex.Pattern.compile("src=\"(/admin/assets/[^\"]+\\.js)\"")
+            .matcher(page.getBody());
+
+    assertThat(matcher.find()).isTrue();
+    String jsPath = matcher.group(1);
+
+    ResponseEntity<String> asset = rest.getForEntity(jsPath, String.class);
+    assertThat(asset.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(asset.getHeaders().getContentType().toString()).contains("javascript");
+  }
 }

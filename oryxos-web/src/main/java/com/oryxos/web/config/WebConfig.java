@@ -43,10 +43,11 @@ public class WebConfig implements WebMvcConfigurer {
               @Override
               protected Resource getResource(String resourcePath, Resource location)
                   throws IOException {
-                // 只有真实存在的文件才直出;目录/未命中一律回落 index.html
+                // 目录请求(空路径/尾斜杠)与未命中一律回落 index.html;文件存在且可读则直出。
+                // 注意不能用 isFile():fat JAR 里嵌套 jar 的资源对它永远返回 false,会误伤静态文件。
                 if (!resourcePath.isEmpty() && !resourcePath.endsWith("/")) {
                   Resource requested = location.createRelative(resourcePath);
-                  if (requested.exists() && requested.isReadable() && requested.isFile()) {
+                  if (requested.exists() && requested.isReadable()) {
                     return requested;
                   }
                 }

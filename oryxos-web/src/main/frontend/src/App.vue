@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import logo from './assets/logo.svg'
 
 // ── 导航与页面状态 ─────────────────────────────────────────────
@@ -37,7 +37,9 @@ function useView(url, { isList = false } = {}) {
       loading.value = false
     }
   }
-  return { loading, error, data, load }
+  // 必须 reactive:模板访问 view.loading/view.data 时 ref 才会自动解包;
+  // 普通对象属性里的 ref 不参与模板解包,会导致"永远加载中/表格永远空"
+  return reactive({ loading, error, data, load })
 }
 
 // ── 五个只读视图的数据源 ───────────────────────────────────────
