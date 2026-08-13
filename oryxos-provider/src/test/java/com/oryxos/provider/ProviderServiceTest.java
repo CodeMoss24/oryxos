@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -171,6 +172,46 @@ class ProviderServiceTest {
     assertThat(entity.isSuccess()).isTrue();
     assertThat(entity.getProvider()).isEqualTo("deepseek");
     assertThat(entity.getPromptTokens()).isEqualTo(10);
+  }
+
+  @Test
+  @DisplayName("会话恢复_带工具历史的消息转换保真(toolCalls与toolCallId不丢)")
+  void historyWithToolMessagesConvertedFaithfully() {
+    com.oryxos.core.react.ToolCall clockCall =
+        new com.oryxos.core.react.ToolCall("call-1", "clock", "{}");
+    Prompt prompt =
+        new Prompt(
+            List.of(
+                Message.user("现在几点"),
+                Message.assistant("", List.of(clockCall)),
+                Message.tool("2026-08-13T16:00:00Z", "call-1"),
+                Message.assistant("现在是 16:00")));
+    when(deepseekModel.call(any(org.springframework.ai.chat.prompt.Prompt.class)))
+        .thenReturn(chatResponse);
+    when(chatResponse.getResult()).thenReturn(generation);
+    when(generation.getOutput()).thenReturn(assistantMessage);
+    when(assistantMessage.getContent()).thenReturn("ok");
+
+    var service = makeService(Map.of("deepseek", deepseekModel));
+
+    service.chat("s-1", profileUsing("deepseek"), prompt);
+
+    var captor = ArgumentCaptor.forClass(org.springframework.ai.chat.prompt.Prompt.class);
+    verify(deepseekModel).call(captor.capture());
+    var msgs = captor.getValue().getInstructions();
+
+    var assistantWithCalls = (AssistantMessage) msgs.get(1);
+    assertThat(assistantWithCalls.getToolCalls()).hasSize(1);
+    assertThat(assistantWithCalls.getToolCalls().get(0).id()).isEqualTo("call-1");
+    assertThat(assistantWithCalls.getToolCalls().get(0).name()).isEqualTo("clock");
+
+    var toolResponse = (ToolResponseMessage) msgs.get(2);
+    assertThat(toolResponse.getResponses()).hasSize(1);
+    assertThat(toolResponse.getResponses().get(0).id()).isEqualTo("call-1");
+    assertThat(toolResponse.getResponses().get(0).responseData()).contains("16:00");
+
+    assertThat(msgs.get(3)).isInstanceOf(AssistantMessage.class);
+    assertThat(msgs.get(0)).isInstanceOf(org.springframework.ai.chat.messages.UserMessage.class);
   }
 
   @Test

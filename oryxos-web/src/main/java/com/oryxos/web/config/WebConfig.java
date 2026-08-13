@@ -6,6 +6,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.resource.PathResourceResolver;
 
@@ -24,6 +25,14 @@ public class WebConfig implements WebMvcConfigurer {
   }
 
   @Override
+  public void addViewControllers(ViewControllerRegistry registry) {
+    // ResourceHttpRequestHandler 对空路径(即 /admin/ 本身)不咨询 resolver 链,根路径必须精确接管:
+    // /admin 重定向到 /admin/,/admin/ 转发到 index.html
+    registry.addViewController("/admin").setViewName("redirect:/admin/");
+    registry.addViewController("/admin/").setViewName("forward:/admin/index.html");
+  }
+
+  @Override
   public void addResourceHandlers(ResourceHandlerRegistry registry) {
     registry
         .addResourceHandler("/admin/**")
@@ -34,9 +43,12 @@ public class WebConfig implements WebMvcConfigurer {
               @Override
               protected Resource getResource(String resourcePath, Resource location)
                   throws IOException {
-                Resource requested = location.createRelative(resourcePath);
-                if (requested.exists() && requested.isReadable()) {
-                  return requested;
+                // 只有真实存在的文件才直出;目录/未命中一律回落 index.html
+                if (!resourcePath.isEmpty() && !resourcePath.endsWith("/")) {
+                  Resource requested = location.createRelative(resourcePath);
+                  if (requested.exists() && requested.isReadable() && requested.isFile()) {
+                    return requested;
+                  }
                 }
                 return new ClassPathResource("/static/admin/index.html");
               }

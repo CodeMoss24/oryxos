@@ -80,4 +80,16 @@ class WebSmokeIT {
     assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     assertThat(resp.getBody().get("code")).isEqualTo(404);
   }
+
+  @Test
+  @DisplayName("管理台 /admin 与子路径均回落 index.html(SPA 不 404)")
+  void adminRootAndSubpathFallBackToIndexHtml() {
+    ResponseEntity<String> root = rest.getForEntity("/admin/", String.class);
+    assertThat(root.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(root.getBody()).contains("OryxOS 管理台");
+
+    ResponseEntity<String> subpath = rest.getForEntity("/admin/sessions", String.class);
+    assertThat(subpath.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(subpath.getBody()).contains("OryxOS 管理台");
+  }
 }

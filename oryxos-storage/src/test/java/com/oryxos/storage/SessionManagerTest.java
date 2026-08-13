@@ -6,6 +6,7 @@ import com.oryxos.core.session.Message;
 import com.oryxos.core.session.SessionManager;
 import com.oryxos.storage.session.JpaSessionManager;
 import com.oryxos.storage.session.SessionCodec;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -91,5 +92,26 @@ class SessionManagerTest {
     assertThat(list).hasSize(2);
     assertThat(list.get(0).getSessionId()).isEqualTo(newer.getSessionId());
     assertThat(list.get(1).getSessionId()).isEqualTo(older.getSessionId());
+  }
+
+  @Test
+  @DisplayName("工具调用轮次持久化保真_toolCalls与toolCallId会话恢复后不丢")
+  void toolCallsSurvivePersistenceRoundTrip() {
+    var session = sessionManager.getOrCreate("cli", "wang", "default");
+    session.append(Message.user("现在几点"));
+    var call = new com.oryxos.core.react.ToolCall("call-1", "clock", "{}");
+    session.append(Message.assistant("", List.of(call)));
+    session.append(Message.tool("16:00", "call-1"));
+    session.append(Message.assistant("现在是 16:00"));
+    sessionManager.save(session);
+
+    var restored = sessionManager.getOrCreate("cli", "wang", "default");
+    assertThat(restored.getMessages()).hasSize(4);
+    var assistantWithCalls = restored.getMessages().get(1);
+    assertThat(assistantWithCalls.toolCalls()).hasSize(1);
+    assertThat(assistantWithCalls.toolCalls().get(0).id()).isEqualTo("call-1");
+    assertThat(assistantWithCalls.toolCalls().get(0).name()).isEqualTo("clock");
+    assertThat(assistantWithCalls.toolCalls().get(0).argumentsJson()).isEqualTo("{}");
+    assertThat(restored.getMessages().get(2).toolCallId()).isEqualTo("call-1");
   }
 }

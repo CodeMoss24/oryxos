@@ -61,6 +61,22 @@ public class SessionCodec {
       if (m.toolCallId() != null) {
         sb.append(",\"toolCallId\":\"").append(escapeJson(m.toolCallId())).append("\"");
       }
+      // 会话恢复保真:assistant 的 toolCalls 必须落库——丢它,含工具历史的会话下一条消息会被 Provider 拒单
+      if (m.toolCalls() != null && !m.toolCalls().isEmpty()) {
+        sb.append(",\"toolCalls\":[");
+        for (int j = 0; j < m.toolCalls().size(); j++) {
+          if (j > 0) sb.append(",");
+          var tc = m.toolCalls().get(j);
+          sb.append("{\"id\":\"")
+              .append(escapeJson(tc.id() != null ? tc.id() : ""))
+              .append("\",\"name\":\"")
+              .append(escapeJson(tc.name() != null ? tc.name() : ""))
+              .append("\",\"argumentsJson\":\"")
+              .append(escapeJson(tc.argumentsJson() != null ? tc.argumentsJson() : ""))
+              .append("\"}");
+        }
+        sb.append("]");
+      }
       sb.append("}");
     }
     return sb.append("]").toString();
@@ -89,10 +105,43 @@ public class SessionCodec {
     String role = extractField(objectJson, "role");
     String content = extractField(objectJson, "content");
     String toolCallId = extractField(objectJson, "toolCallId");
+    List<com.oryxos.core.react.ToolCall> toolCalls = extractToolCalls(objectJson);
     if (!toolCallId.isEmpty()) {
-      return new Message(role, content, null, toolCallId);
+      return new Message(role, content, toolCalls, toolCallId);
+    }
+    if (!toolCalls.isEmpty()) {
+      return new Message(role, content, toolCalls, null);
     }
     return new Message(role, content);
+  }
+
+  /** 解析 toolCalls 数组(可选字段;老数据没有则返回空列表,向后兼容)。 */
+  private List<com.oryxos.core.react.ToolCall> extractToolCalls(String objectJson) {
+    String key = "\"toolCalls\":[";
+    int arrIdx = objectJson.indexOf(key);
+    if (arrIdx < 0) {
+      return List.of();
+    }
+    List<com.oryxos.core.react.ToolCall> result = new ArrayList<>();
+    int i = arrIdx + key.length();
+    int end = objectJson.indexOf(']', i);
+    if (end < 0) {
+      return result;
+    }
+    while (i < end) {
+      int start = objectJson.indexOf('{', i);
+      if (start < 0 || start > end) break;
+      int close = findClosingBrace(objectJson, start);
+      if (close < 0) break;
+      String element = objectJson.substring(start, close + 1);
+      result.add(
+          new com.oryxos.core.react.ToolCall(
+              extractField(element, "id"),
+              extractField(element, "name"),
+              extractField(element, "argumentsJson")));
+      i = close + 1;
+    }
+    return result;
   }
 
   private String extractField(String objectJson, String field) {
@@ -100,18 +149,38 @@ public class SessionCodec {
     int keyIdx = objectJson.indexOf(key);
     if (keyIdx < 0) return "";
     int start = keyIdx + key.length();
-    int end = objectJson.indexOf('"', start);
+    int end = findClosingQuote(objectJson, start);
     if (end < 0) return "";
     return unescapeJson(objectJson.substring(start, end));
   }
 
+  /** 找字段值的闭合引号,值内转义引号(\\\")不算结束。 */
+  private int findClosingQuote(String json, int start) {
+    for (int i = start; i < json.length(); i++) {
+      char c = json.charAt(i);
+      if (c == '\\') {
+        i++;
+      } else if (c == '"') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** 找与 openIndex 配对的闭合花括号,按深度计数——嵌套对象(如 toolCalls 数组元素)不会提前截断。 */
   private int findClosingBrace(String json, int openIndex) {
-    for (int i = openIndex + 1; i < json.length(); i++) {
+    int depth = 0;
+    for (int i = openIndex; i < json.length(); i++) {
       char c = json.charAt(i);
       if (c == '"') {
         i = skipString(json, i);
+      } else if (c == '{') {
+        depth++;
       } else if (c == '}') {
-        return i;
+        depth--;
+        if (depth == 0) {
+          return i;
+        }
       }
     }
     return -1;

@@ -11,7 +11,9 @@ spring:
     exclude:
       - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
   datasource:
-    url: jdbc:sqlite:.oryxos/oryxos.db
+    # 并发配置(200 并发压测实证):journal_mode=WAL 让读不阻塞写;busy_timeout 让并发写等待而非直接
+    # SQLITE_BUSY 失败——默认配置下负载一高,会话写与审计写(llm_calls/tool_invocations)会丢行
+    url: jdbc:sqlite:.oryxos/oryxos.db?journal_mode=WAL&busy_timeout=30000
     driver-class-name: org.sqlite.JDBC
   jpa:
     hibernate:

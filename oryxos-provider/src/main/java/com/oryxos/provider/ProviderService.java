@@ -8,6 +8,7 @@ import com.oryxos.core.react.LlmResponse;
 import com.oryxos.core.react.Prompt;
 import com.oryxos.core.react.ProviderPort;
 import com.oryxos.core.react.ToolCall;
+import com.oryxos.core.session.Message;
 import com.oryxos.storage.entity.LlmCallEntity;
 import com.oryxos.storage.repository.LlmCallRepository;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -268,16 +270,35 @@ public class ProviderService implements ProviderPort {
   }
 
   private List<org.springframework.ai.chat.messages.Message> toSpringAiMessages(Prompt prompt) {
-    return prompt.messages().stream()
-        .map(
-            m ->
-                switch (m.role()) {
-                  case "user" -> new org.springframework.ai.chat.messages.UserMessage(m.content());
-                  case "assistant" -> new AssistantMessage(m.content());
-                  default -> new org.springframework.ai.chat.messages.SystemMessage(m.content());
-                })
-        .map(msg -> (org.springframework.ai.chat.messages.Message) msg)
-        .toList();
+    return prompt.messages().stream().map(ProviderService::toSpringAiMessage).toList();
+  }
+
+  /**
+   * 会话恢复保真转换:assistant 必须带 toolCalls、tool 必须带 toolCallId——丢任何一项,含工具历史的会话 下一条消息就会被 Provider
+   * 拒单("Messages with role 'tool' must be a response to a preceding message with
+   * 'tool_calls'",审计表实证)。
+   */
+  private static org.springframework.ai.chat.messages.Message toSpringAiMessage(Message m) {
+    if ("user".equals(m.role())) {
+      return new org.springframework.ai.chat.messages.UserMessage(m.content());
+    }
+    if ("assistant".equals(m.role())) {
+      List<AssistantMessage.ToolCall> toolCalls =
+          m.toolCalls() == null
+              ? List.of()
+              : m.toolCalls().stream()
+                  .map(
+                      tc ->
+                          new AssistantMessage.ToolCall(
+                              tc.id(), "function", tc.name(), tc.argumentsJson()))
+                  .toList();
+      return new AssistantMessage(m.content(), Map.of(), toolCalls);
+    }
+    if ("tool".equals(m.role())) {
+      return new ToolResponseMessage(
+          List.of(new ToolResponseMessage.ToolResponse(m.toolCallId(), null, m.content())));
+    }
+    return new org.springframework.ai.chat.messages.SystemMessage(m.content());
   }
 
   private String extractContent(ChatResponse response) {
