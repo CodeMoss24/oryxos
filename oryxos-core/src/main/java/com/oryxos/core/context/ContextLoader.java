@@ -1,6 +1,7 @@
 package com.oryxos.core.context;
 
 import com.oryxos.core.profile.Profile;
+import com.oryxos.core.runtime.OryxOsRuntime;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,7 +23,7 @@ public class ContextLoader {
   private final Path workspace;
 
   public ContextLoader() {
-    this(Path.of(".oryxos"));
+    this(OryxOsRuntime.workspaceRoot());
   }
 
   public ContextLoader(Path workspace) {

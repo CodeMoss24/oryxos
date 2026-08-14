@@ -14,7 +14,7 @@ public class SessionCommand implements Runnable {
 
   @Override
   public void run() {
-    Path db = Path.of(".oryxos", "oryxos.db");
+    Path db = com.oryxos.core.runtime.OryxOsRuntime.resolve("oryxos.db");
     if (!Files.isRegularFile(db)) {
       System.out.println("No sessions yet (.oryxos/oryxos.db not found)");
       return;

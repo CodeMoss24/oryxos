@@ -22,4 +22,7 @@ public interface SessionManager {
 
   /** 列出全部会话,按 lastActiveAt 倒序。供管理台会话列表等只读查询。 */
   List<Session> listAll();
+
+  /** 列出最近 N 个会话,按 lastActiveAt 倒序。供会话列表端点(默认 100 条)使用。 */
+  List<Session> listRecent(int limit);
 }

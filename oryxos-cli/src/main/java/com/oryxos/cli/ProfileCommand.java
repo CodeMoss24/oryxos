@@ -26,7 +26,7 @@ public class ProfileCommand implements Runnable {
   static class List implements Runnable {
     @Override
     public void run() {
-      java.nio.file.Path agents = java.nio.file.Path.of(".oryxos", "agents");
+      java.nio.file.Path agents = com.oryxos.core.runtime.OryxOsRuntime.resolve("agents");
       if (!java.nio.file.Files.isDirectory(agents)) {
         System.out.println("(no agents)");
         return;
@@ -52,7 +52,7 @@ public class ProfileCommand implements Runnable {
     @Override
     public void run() {
       try {
-        java.nio.file.Path dir = java.nio.file.Path.of(".oryxos", "agents", name);
+        java.nio.file.Path dir = com.oryxos.core.runtime.OryxOsRuntime.resolve("agents", name);
         java.nio.file.Files.createDirectories(dir);
         java.nio.file.Path md = dir.resolve("AGENT.md");
         if (!java.nio.file.Files.exists(md)) {
@@ -90,7 +90,8 @@ public class ProfileCommand implements Runnable {
     @Override
     public void run() {
       try {
-        java.nio.file.Path md = java.nio.file.Path.of(".oryxos", "agents", name, "AGENT.md");
+        java.nio.file.Path md =
+            com.oryxos.core.runtime.OryxOsRuntime.resolve("agents", name, "AGENT.md");
         if (java.nio.file.Files.exists(md)) {
           System.out.println(java.nio.file.Files.readString(md));
         } else {
@@ -110,7 +111,7 @@ public class ProfileCommand implements Runnable {
     @Override
     public void run() {
       try {
-        java.nio.file.Path dir = java.nio.file.Path.of(".oryxos", "agents", name);
+        java.nio.file.Path dir = com.oryxos.core.runtime.OryxOsRuntime.resolve("agents", name);
         if (java.nio.file.Files.isDirectory(dir)) {
           deleteRecursive(dir);
           System.out.println("Deleted: " + name);

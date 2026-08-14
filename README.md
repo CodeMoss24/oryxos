@@ -194,6 +194,102 @@ java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve               
 java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar gateway                        # 多渠道守护进程
 ```
 
+### 第 27 节：mock provider（无 key 跑通全链路）
+
+`mock` 是内置的独立 provider：不联网、不需要任何 API key，按两轮脚本驱动一次确定性的 ReAct——
+
+1. 第一轮把用户消息里"记住：…"的事实抽出来，请求一次 `save_memory`（真实写入 MEMORY.md）；
+2. 第二轮直接返回最终答复"好的，已记住：…"。
+
+只有模型是假的，ReActLoop / ToolExecutor / Memory / SQLite 审计 / Session 持久化全部走真实路径。用它验证全链路不需要任何密钥：
+
+```markdown
+<!-- .oryxos/agents/mock-agent/AGENT.md -->
+---
+name: mock-agent
+description: 记忆测试 agent
+provider:
+  name: mock
+  model: mock
+tools: [save_memory, recall_memory]
+---
+你是记忆助手。用户说"记住：…"时用 save_memory 工具记住；需要回忆时用 recall_memory。
+```
+
+### 人推验证（第 27 节对账的三种触发源之"人推"）
+
+```bash
+# 1) REST 无状态调用（serve 启动后）
+curl -s -X POST localhost:8080/api/v1/agents/mock-agent/invoke \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"记住:我住在上海","user_id":"alice"}'
+# → {"reply":"好的，已记住：我住在上海",...}
+
+# 2) 会话列表（第 27 节升级为摘要 DTO，可 ?status= 过滤）
+curl -s localhost:8080/api/v1/sessions
+# → 含 web:alice:mock-agent 的 sessionId / profileName / messageCount
+
+# 3) 审计落库（会话、工具调用、LLM 调用三表都能查到）
+curl -s localhost:8080/api/v1/sessions/web:alice:mock-agent   # 4 条消息：user/assistant/tool/assistant
+sqlite3 .oryxos/oryxos.db "select * from llm_calls where session_id='web:alice:mock-agent';"
+sqlite3 .oryxos/oryxos.db "select * from tool_invocations where session_id='web:alice:mock-agent';"
+```
+
+---
+
+## 测试
+
+测试分两层:**单测/切片测试**(`*Test` 后缀,`mvn clean verify` 自动跑)与**集成测试**(`*IT` 后缀,surefire 默认排除,需手动运行——IT 要起真 Spring 上下文,涉及真 key / 真网络,留给人推验证)。
+
+### 全量门禁
+
+```bash
+mvn clean verify
+```
+
+跑什么:所有单测 + 静态检查(P3C / SpotBugs / FindSecBugs / PMD),**集成测试不在其中**。
+
+### 手动跑集成测试
+
+三个 IT 类都在 `oryxos-boot` 模块。命令**必须带 `-am`**(also-make):单模块不带 `-am` 会复用 `~/.m2` 里的旧 jar,报 `NoClassDefFoundError: OryxOsRuntime`。
+
+```bash
+# 单独跑一个
+mvn test -pl oryxos-boot -am \
+  -Dtest='HumanTriggerFlowIT' \
+  -Dsurefire.failIfNoSpecifiedTests=false
+
+# 一次跑多个
+mvn test -pl oryxos-boot -am \
+  -Dtest='HumanTriggerFlowIT,WebSmokeIT,ProviderSmokeIT' \
+  -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+| 参数/环境 | 作用 |
+|-----------|------|
+| `-am` | 连带构建依赖模块,绕开 m2 stale-jar 陷阱 |
+| `-Dsurefire.failIfNoSpecifiedTests=false` | 允许没有匹配测试的模块不报错 |
+| `DEEPSEEK_API_KEY` | 设置了,真模型用例真实运行;未设置,那些用例 `assumeTrue` 跳过,失败路径用例恒跑(不依赖模型) |
+| 报告位置 | 各模块 `target/surefire-reports/` |
+
+现有集成测试:
+
+| 类 | 覆盖 |
+|----|------|
+| `HumanTriggerFlowIT` | 人推全流程:真模型天气查询(http_get → wttr.in)+ provider 未配置 / 沙箱越界 / 工具抛异常三条确定性失败路径,成败都落审计 |
+| `WebSmokeIT` | Web 层冒烟(健康检查、静态资源) |
+| `ProviderSmokeIT` | Provider 连通探活 |
+
+### 手工过一遍(不写代码,验证真实行为)
+
+```bash
+# 改了代码/前端后必须先重新构建再重启,否则测的是旧代码(管理台看不到新数据即此坑)
+mvn package -DskipTests
+java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve --server.port=8080
+```
+
+启动后按链路逐项验证(具体 curl 见上文「人推验证」):`/api/v1/health`、`/api/v1/profiles` → invoke 人推 → `/api/v1/sessions` 会话列表 → `sqlite3 .oryxos/oryxos.db` 查 `llm_calls` / `tool_invocations` 审计两表 → 浏览器开 `http://localhost:8080/admin/` 核对管理台展示层。
+
 ---
 
 ## 模块结构

@@ -31,7 +31,12 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
 
   private final Path memoryFile;
 
-  public MarkdownMemoryStore(@Value("${oryxos.workspace:.oryxos}") String workspace) {
+  /**
+   * 工作区根:优先 oryxos.root 系统属性(27 节 OryxOsRuntime 同口径),回落到 oryxos.workspace, 再默认 ".oryxos"。
+   * 嵌套占位符让整机测试只需设一个 oryxos.root 就同时覆盖记忆与其它工作区路径。
+   */
+  public MarkdownMemoryStore(
+      @Value("${oryxos.root:${oryxos.workspace:.oryxos}}") String workspace) {
     this.memoryFile = Path.of(workspace, "memory", "MEMORY.md");
   }
 

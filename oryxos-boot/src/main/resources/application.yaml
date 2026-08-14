@@ -32,6 +32,8 @@ oryxos:
     - name: kimi
       api-key: ${KIMI_API_KEY:}
       base-url: https://api.moonshot.cn
+    # 第 27 节:独立 mock provider,无 key、不联网,按脚本驱动一次确定性的 ReAct(见 MockChatModel)
+    - name: mock
   memory:
     # 长期记忆后端:markdown(默认,文件 MEMORY.md)| sqlite(memory_entries 表)| mem0(外部服务,
     # 需配 MEM0_BASE_URL / MEM0_USER_ID 环境变量)。换后端只改这一行,MemoryService 上层代码不动。

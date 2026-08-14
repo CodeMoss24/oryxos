@@ -1,5 +1,6 @@
 package com.oryxos.core.profile;
 
+import com.oryxos.core.runtime.OryxOsRuntime;
 import com.oryxos.core.scheduler.ScheduleConfig;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -28,7 +29,7 @@ public class AgentLoader {
   private final Path agentsDir;
 
   public AgentLoader() {
-    this(Path.of(".oryxos", "agents"));
+    this(OryxOsRuntime.resolve("agents"));
   }
 
   public AgentLoader(Path agentsDir) {

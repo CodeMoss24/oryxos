@@ -54,6 +54,17 @@ public class JpaSessionManager implements SessionManager {
         .toList();
   }
 
+  @Override
+  public List<Session> listRecent(int limit) {
+    return sessionRepository.findAll().stream()
+        .map(sessionCodec::fromEntity)
+        .sorted(
+            Comparator.comparing(
+                Session::getLastActiveAt, Comparator.nullsLast(Comparator.reverseOrder())))
+        .limit(limit)
+        .toList();
+  }
+
   private String buildSessionId(String channel, String user, String profileName) {
     return channel + ":" + user + ":" + profileName;
   }

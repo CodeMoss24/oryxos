@@ -75,7 +75,7 @@ public class OryxOsApplication implements CommandLineRunner {
   @Override
   public void run(String... args) {
     // 仅当 .oryxos/agents/ 存在时扫描注册,避免 init 未跑时空扫
-    Path agentsDir = Path.of(".oryxos", "agents");
+    Path agentsDir = com.oryxos.core.runtime.OryxOsRuntime.resolve("agents");
     if (Files.isDirectory(agentsDir)) {
       agentLoader.scanAndRegister(profileRegistry);
     }

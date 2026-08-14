@@ -38,6 +38,12 @@ public class ProviderAutoConfiguration {
     Map<String, ChatModel> map = new HashMap<>();
     if (props.getProviders() != null) {
       for (var entry : props.getProviders()) {
+        // 第 27 节:mock 是独立 mock provider——无 key、不联网,按脚本驱动 ReAct,不进 OpenAiApi 构造
+        if ("mock".equals(entry.name())) {
+          map.put(entry.name(), new MockChatModel());
+          log.info("Registered LLM provider: mock (no-key deterministic script)");
+          continue;
+        }
         var api =
             new OpenAiApi(entry.baseUrl(), entry.apiKey(), restClientBuilder, webClientBuilder);
         var chatModel = new OpenAiChatModel(api, OpenAiChatOptions.builder().build());

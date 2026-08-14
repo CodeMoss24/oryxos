@@ -3,6 +3,7 @@ package com.oryxos.web.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
@@ -231,20 +232,28 @@ class SessionApiControllerTest {
   }
 
   @Test
-  @DisplayName("会话列表_返回概要数组(第11个只读端点)")
+  @DisplayName("会话列表_返回摘要DTO数组(第27节升级:listRecent+驼峰字段+status过滤)")
   void listReturnsSessionSummaries() throws Exception {
     Session s2 = new Session("s-2", "p2", "cli", "user2");
-    when(sessionManager.listAll()).thenReturn(List.of(s2, session));
+    when(sessionManager.listRecent(anyInt())).thenReturn(List.of(s2, session));
 
     mockMvc
         .perform(get("/api/v1/sessions"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.length()").value(2))
-        .andExpect(jsonPath("$.data[0].session_id").value("s-2"))
-        .andExpect(jsonPath("$.data[0].profile_name").value("p2"))
+        .andExpect(jsonPath("$.data[0].sessionId").value("s-2"))
+        .andExpect(jsonPath("$.data[0].profileName").value("p2"))
         .andExpect(jsonPath("$.data[0].channel").value("cli"))
-        .andExpect(jsonPath("$.data[0].user_id").value("user2"))
+        .andExpect(jsonPath("$.data[0].userId").value("user2"))
         .andExpect(jsonPath("$.data[0].status").value("active"))
-        .andExpect(jsonPath("$.data[1].session_id").value("s-1"));
+        .andExpect(jsonPath("$.data[1].sessionId").value("s-1"));
+
+    // ?status= 过滤:只保留匹配状态的会话
+    session.setStatus("archived");
+    mockMvc
+        .perform(get("/api/v1/sessions").param("status", "archived"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(1))
+        .andExpect(jsonPath("$.data[0].sessionId").value("s-1"));
   }
 }

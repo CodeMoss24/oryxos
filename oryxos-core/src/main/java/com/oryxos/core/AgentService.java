@@ -65,7 +65,7 @@ public class AgentService {
   private String loadAgentMdBody(String profileName) {
     try {
       java.nio.file.Path agentMd =
-          java.nio.file.Path.of(".oryxos", "agents", profileName, "AGENT.md");
+          com.oryxos.core.runtime.OryxOsRuntime.resolve("agents", profileName, "AGENT.md");
       if (java.nio.file.Files.exists(agentMd)) {
         AgentLoader.ParsedAgentMd parsed = agentLoader.parseAgentMd(agentMd);
         return parsed.body();

@@ -184,13 +184,13 @@ function formatTime(ts) {
           <tr><th>会话 ID</th><th>Profile</th><th>渠道</th><th>用户</th><th>状态</th><th>最近活跃</th></tr>
         </thead>
         <tbody>
-          <tr v-for="s in sessions.data" :key="s.session_id">
-            <td class="mono">{{ s.session_id }}</td>
-            <td>{{ s.profile_name }}</td>
+          <tr v-for="s in sessions.data" :key="s.sessionId">
+            <td class="mono">{{ s.sessionId }}</td>
+            <td>{{ s.profileName }}</td>
             <td>{{ s.channel }}</td>
-            <td class="mono">{{ s.user_id }}</td>
+            <td class="mono">{{ s.userId }}</td>
             <td><span class="badge" :class="s.status === 'archived' ? 'badge-warn' : 'badge-ok'">{{ s.status }}</span></td>
-            <td class="mono dim">{{ formatTime(s.last_active_at) }}</td>
+            <td class="mono dim">{{ formatTime(s.lastActiveAt) }}</td>
           </tr>
         </tbody>
       </table>

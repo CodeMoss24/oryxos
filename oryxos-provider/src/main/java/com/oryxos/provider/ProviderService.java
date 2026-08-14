@@ -21,6 +21,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -101,15 +102,18 @@ public class ProviderService implements ProviderPort {
   @Override
   public LlmResponse chat(String sessionId, Profile profile, Prompt prompt) {
     String providerName = profile.getProvider().name();
-    ChatModel chatModel = providerMap.get(providerName);
-    if (chatModel == null) {
-      throw new ProviderNotFoundException(providerName);
-    }
-
     long startedAt = System.currentTimeMillis();
     try {
+      ChatModel chatModel = providerMap.get(providerName);
+      // 放在 try 内:provider 未配置也算一次失败的 LLM 调用,落审计(第 27 节对账 H4 ②)
+      if (chatModel == null) {
+        throw new ProviderNotFoundException(providerName);
+      }
       LlmResponse result;
-      if (prompt.availableTools() != null && !prompt.availableTools().isEmpty()) {
+      if (chatModel instanceof MockChatModel) {
+        // 第 27 节:mock 走 ChatModel 路径(工具脚本在 MockChatModel 内部驱动,ReAct 循环不感知)
+        result = chatWithoutTools(sessionId, profile, prompt, chatModel, startedAt);
+      } else if (prompt.availableTools() != null && !prompt.availableTools().isEmpty()) {
         result = chatWithTools(sessionId, profile, prompt, startedAt);
       } else {
         result = chatWithoutTools(sessionId, profile, prompt, chatModel, startedAt);
@@ -179,7 +183,10 @@ public class ProviderService implements ProviderPort {
     }
   }
 
-  /** 无工具:走 Spring AI ChatModel 路径(保持原有逻辑) */
+  /**
+   * 无工具:走 Spring AI ChatModel 路径(保持原有逻辑)。MockChatModel 也走此路径——它第一轮会在 ChatResponse 的 generations 里带出
+   * save_memory 工具调用,因此这里统一做工具调用提取。
+   */
   private LlmResponse chatWithoutTools(
       String sessionId, Profile profile, Prompt prompt, ChatModel chatModel, long startedAt) {
     List<org.springframework.ai.chat.messages.Message> messages = toSpringAiMessages(prompt);
@@ -190,7 +197,23 @@ public class ProviderService implements ProviderPort {
     ChatResponse response = chatModel.call(springPrompt);
 
     var usage = extractUsage(response);
-    return new LlmResponse(extractContent(response), List.of(), usage);
+    return new LlmResponse(extractContent(response), extractToolCalls(response), usage);
+  }
+
+  /** 从 ChatResponse 的 generations 里提取 tool calls(真实 provider 无工具路径不会返回,只有 mock 会有)。 */
+  private List<ToolCall> extractToolCalls(ChatResponse response) {
+    List<ToolCall> toolCalls = new ArrayList<>();
+    if (response.getResults() != null) {
+      for (Generation g : response.getResults()) {
+        AssistantMessage output = g.getOutput();
+        if (output.getToolCalls() != null) {
+          for (AssistantMessage.ToolCall tc : output.getToolCalls()) {
+            toolCalls.add(new ToolCall(tc.id(), tc.name(), tc.arguments()));
+          }
+        }
+      }
+    }
+    return toolCalls;
   }
 
   @SuppressWarnings("unchecked")

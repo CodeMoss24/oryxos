@@ -6,9 +6,9 @@ import com.oryxos.core.session.SessionManager;
 import com.oryxos.web.dto.ApiResponse;
 import com.oryxos.web.dto.MessageRequest;
 import com.oryxos.web.dto.MessageResponse;
+import com.oryxos.web.dto.SessionSummaryDto;
 import com.oryxos.web.exception.InvalidRequestException;
 import com.oryxos.web.exception.SessionNotFoundException;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -34,6 +35,9 @@ public class SessionApiController {
 
   /** 会话历史返回上限(课件定值) */
   private static final int MAX_HISTORY_SIZE = 100;
+
+  /** 会话列表返回上限(第 27 节定值) */
+  private static final int MAX_SESSION_LIST_SIZE = 100;
 
   private final AgentService agentService;
   private final SessionManager sessionManager;
@@ -85,11 +89,17 @@ public class SessionApiController {
     return ApiResponse.ok(Map.of("status", "archived"));
   }
 
-  /** 会话列表(只读扩展端点):供管理台"会话列表"页与运维查询。 */
+  /**
+   * 会话列表(只读扩展端点,第 27 节):按最后活跃时间倒序、默认返回最近 100 条的摘要(不带完整对话正文), 可选参数 ?status=active
+   * 过滤。供管理台"会话列表"页与对账断言使用。
+   */
   @GetMapping
-  public ApiResponse<List<Map<String, Object>>> list() {
-    List<Map<String, Object>> summaries =
-        sessionManager.listAll().stream().map(SessionApiController::toSummary).toList();
+  public ApiResponse<List<SessionSummaryDto>> list(@RequestParam(required = false) String status) {
+    List<SessionSummaryDto> summaries =
+        sessionManager.listRecent(MAX_SESSION_LIST_SIZE).stream()
+            .filter(s -> status == null || status.equals(s.getStatus()))
+            .map(SessionSummaryDto::from)
+            .toList();
     return ApiResponse.ok(summaries);
   }
 
@@ -97,16 +107,5 @@ public class SessionApiController {
     return sessionManager
         .get(id)
         .orElseThrow(() -> new SessionNotFoundException("session not found: " + id));
-  }
-
-  private static Map<String, Object> toSummary(Session s) {
-    Map<String, Object> summary = new LinkedHashMap<>();
-    summary.put("session_id", s.getSessionId());
-    summary.put("profile_name", s.getProfileName());
-    summary.put("channel", s.getChannel());
-    summary.put("user_id", s.getUserId());
-    summary.put("status", s.getStatus());
-    summary.put("last_active_at", s.getLastActiveAt());
-    return summary;
   }
 }
