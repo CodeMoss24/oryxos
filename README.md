@@ -97,6 +97,13 @@ export DEEPSEEK_API_KEY=sk-xxx    # 只需一个 Provider 密钥即可启动
 java -jar oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar serve
 ```
 
+也可以用仓库根目录的启停脚本（后台运行 + 日志落 `.oryxos/logs/server.log`，pid 记 `.oryxos/server.pid`）：
+
+```bash
+./start.sh              # 默认 8080；端口被占时 ./start.sh 8081
+./stop.sh               # 停止
+```
+
 启动后同一进程同时提供：
 
 | 入口 | 地址 |
