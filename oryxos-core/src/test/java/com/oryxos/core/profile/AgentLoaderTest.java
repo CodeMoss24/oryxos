@@ -2,8 +2,12 @@ package com.oryxos.core.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.oryxos.core.scheduler.ScheduleConfig;
+import com.oryxos.core.tool.OryxTool;
+import com.oryxos.core.tool.ToolRegistry;
+import com.oryxos.core.tool.ToolResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
@@ -298,6 +302,235 @@ class AgentLoaderTest {
     var parsed = loader.parseAgentMd(md);
     assertThat(parsed.frontmatter()).containsKey("provider");
     assertThat(parsed.body()).contains("Do the thing");
+  }
+
+  @Test
+  @DisplayName("缺 provider.name 必填项 → 报错点名 Agent 和字段")
+  void missingProviderName_throwsNamingAgentAndField() throws Exception {
+    var loader = new AgentLoader(agentsDir);
+    var parsed =
+        loader.parseAgentMd(
+            writeAgentMd(
+                "no-provider",
+                """
+            ---
+            description: "no provider"
+            ---
+            # body
+            """));
+    assertThatThrownBy(() -> loader.deriveProfile("no-provider", parsed))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Agent 'no-provider': missing required field 'provider.name'");
+  }
+
+  @Test
+  @DisplayName("provider.name 为空串 → 报错点名")
+  void blankProviderName_throwsNamingAgentAndField() throws Exception {
+    var loader = new AgentLoader(agentsDir);
+    var parsed =
+        loader.parseAgentMd(
+            writeAgentMd(
+                "blank-provider",
+                """
+            ---
+            provider:
+              name: ""
+              model: deepseek-chat
+            ---
+            # body
+            """));
+    assertThatThrownBy(() -> loader.deriveProfile("blank-provider", parsed))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Agent 'blank-provider': missing required field 'provider.name'");
+  }
+
+  @Test
+  @DisplayName("缺 provider 整段 → 报错点名")
+  void missingProviderSection_throwsNamingAgentAndField() throws Exception {
+    var loader = new AgentLoader(agentsDir);
+    var parsed =
+        loader.parseAgentMd(
+            writeAgentMd(
+                "no-provider-section",
+                """
+                    ---
+                    description: "no provider section"
+                    ---
+                    # body
+                    """));
+    assertThatThrownBy(() -> loader.deriveProfile("no-provider-section", parsed))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Agent 'no-provider-section': missing required field 'provider.name'");
+  }
+
+  @Test
+  @DisplayName("name 为空 → 报错点名(unknown)")
+  void blankName_throwsNamingUnknown() throws Exception {
+    var loader = new AgentLoader(agentsDir);
+    var parsed =
+        loader.parseAgentMd(
+            writeAgentMd(
+                "some",
+                """
+                    ---
+                    provider:
+                      name: deepseek
+                      model: deepseek-chat
+                    ---
+                    # body
+                    """));
+    assertThatThrownBy(() -> loader.deriveProfile("  ", parsed))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Agent '<unknown>': missing required field 'name'");
+  }
+
+  @Test
+  @DisplayName("缺 provider 必填项的 Agent 不阻断其余加载")
+  void missingRequiredField_doesNotBlockRemainingLoads() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ProfileRegistry();
+    writeAgent(
+        "broken",
+        """
+                ---
+                description: "no provider"
+                ---
+                # body
+                """);
+    writeAgent(
+        "good",
+        """
+                ---
+                provider:
+                  name: deepseek
+                  model: deepseek-chat
+                ---
+                # body
+                """);
+
+    int count = loader.scanAndRegister(registry);
+    assertThat(count).isEqualTo(1);
+    assertThat(registry.find("good")).isPresent();
+    assertThat(registry.find("broken")).isEmpty();
+  }
+
+  @Test
+  @DisplayName("listResources 识别 scripts/skills/REFERENCE.md 是否存在")
+  void listResources_identifiesOptionalResources() {
+    var loader = new AgentLoader(agentsDir);
+    Path dir = agentsDir.resolve("rich");
+    try {
+      Files.createDirectories(dir.resolve("scripts"));
+      Files.createDirectories(dir.resolve("skills"));
+      Files.writeString(dir.resolve("REFERENCE.md"), "# ref");
+      Files.writeString(
+          dir.resolve("AGENT.md"),
+          """
+              ---
+              provider:
+                name: deepseek
+                model: deepseek-chat
+              ---
+              # body
+              """);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+
+    var resources = loader.listResources(dir);
+    assertThat(resources).containsEntry("scripts", true);
+    assertThat(resources).containsEntry("skills", true);
+    assertThat(resources).containsEntry("reference", true);
+  }
+
+  @Test
+  @DisplayName("listResources 对无可选资源的目录全判 false")
+  void listResources_allFalseWhenAbsent() {
+    var loader = new AgentLoader(agentsDir);
+    Path dir = agentsDir.resolve("bare");
+    try {
+      Files.createDirectories(dir);
+      Files.writeString(
+          dir.resolve("AGENT.md"),
+          """
+              ---
+              provider:
+                name: deepseek
+                model: deepseek-chat
+              ---
+              # body
+              """);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+
+    var resources = loader.listResources(dir);
+    assertThat(resources).containsEntry("scripts", false);
+    assertThat(resources).containsEntry("skills", false);
+    assertThat(resources).containsEntry("reference", false);
+  }
+
+  @Test
+  @DisplayName("tools 引用未注册能力 → warnUnregisteredTools 不抛异常(告警不阻断)")
+  void warnUnregisteredTools_doesNotThrowForUnregistered() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ToolRegistry();
+    registry.register(stubTool("shell"));
+    Profile profile = new Profile();
+    profile.setName("recon");
+    profile.setTools(java.util.List.of("shell", "ghost-tool"));
+
+    assertThatNoException().isThrownBy(() -> loader.warnUnregisteredTools(profile, registry));
+  }
+
+  @Test
+  @DisplayName("tools 全部已注册 → warnUnregisteredTools 安静通过")
+  void warnUnregisteredTools_quietWhenAllRegistered() {
+    var loader = new AgentLoader(agentsDir);
+    var registry = new ToolRegistry();
+    registry.register(stubTool("shell"));
+    registry.register(stubTool("read_file"));
+    Profile profile = new Profile();
+    profile.setName("recon");
+    profile.setTools(java.util.List.of("shell", "read_file"));
+
+    assertThatNoException().isThrownBy(() -> loader.warnUnregisteredTools(profile, registry));
+  }
+
+  private OryxTool stubTool(String name) {
+    return new OryxTool() {
+      @Override
+      public String getName() {
+        return name;
+      }
+
+      @Override
+      public String getDescription() {
+        return "stub";
+      }
+
+      @Override
+      public String getInputSchema() {
+        return "{}";
+      }
+
+      @Override
+      public ToolResult execute(String inputJson) {
+        return new ToolResult(true, "", null, false);
+      }
+    };
+  }
+
+  private Path writeAgentMd(String name, String content) {
+    try {
+      Path dir = agentsDir.resolve(name);
+      Files.createDirectories(dir);
+      Path md = dir.resolve("AGENT.md");
+      Files.writeString(md, content);
+      return md;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   private Path writeAgent(String name, String content) {

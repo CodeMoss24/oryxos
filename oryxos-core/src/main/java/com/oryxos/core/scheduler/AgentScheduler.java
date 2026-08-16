@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -54,6 +55,12 @@ public class AgentScheduler {
   /** 已注册到 taskScheduler 的 taskId 集合,防重复调度。 */
   private final java.util.Set<String> scheduledTaskIds = ConcurrentHashMap.newKeySet();
 
+  /**
+   * 第 29 节:taskId → 调度句柄表,捕获 taskScheduler.schedule(...) 返回的 ScheduledFuture。 与 taskLocks/taskRefs
+   * 并存, 供下节(30)注销/更新定时任务时 future.cancel() + 移出索引,免重启。 启动扫描与运行时注册都经 registerProfile 填这张表(同一段代码)。
+   */
+  private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
   public AgentScheduler(
       ProfileRegistry profileRegistry,
       AgentService agentService,
@@ -67,37 +74,50 @@ public class AgentScheduler {
     this.store = store;
   }
 
-  /** 启动时扫一遍所有 Profile,把每条 schedules 配置注册进 taskScheduler 并登记到 store。 */
+  /** 启动时扫一遍所有 Profile,逐个调 registerProfile 注册(同一段代码,运行时新增也走它)。 */
   public void registerAll() {
     for (Profile profile : profileRegistry.list()) {
-      for (ScheduleConfig sc : profile.getSchedules()) {
-        try {
-          // 幂等:已调度过的任务不重复注册(防 @PostConstruct + 后续重新扫描重复调度)
-          if (!scheduledTaskIds.add(sc.id())) {
-            continue;
-          }
-          ZoneId zoneId = sc.zoneId();
-          CronExpression cronExpr = CronExpression.parse(sc.cron());
-          Instant nextRunAt = cronExpr.next(java.time.ZonedDateTime.now(zoneId)).toInstant();
-          // cron + 时区一起传,别让服务器时区替用户做主
-          taskScheduler.schedule(() -> runOnce(profile, sc), new CronTrigger(sc.cron(), zoneId));
-          store.register(sc, profile.getName(), nextRunAt);
-          taskRefs.put(sc.id(), new ProfileTaskRef(profile, sc));
-          log.info(
-              "Registered schedule {} for agent {}: cron={} zone={}",
-              sc.id(),
-              profile.getName(),
-              sc.cron(),
-              sc.zone());
-        } catch (IllegalArgumentException e) {
-          // 非法 cron 只记错误不阻断启动,其余任务照常注册
-          log.error(
-              "Invalid cron for schedule {} of agent {}: {}",
-              sc.id(),
-              profile.getName(),
-              sc.cron(),
-              e);
+      registerProfile(profile);
+    }
+  }
+
+  /**
+   * 注册单个 Profile 的全部 schedules:幂等检查 → CronTrigger schedule → 落 store → 填 taskRefs + scheduledTasks
+   * 句柄表。
+   *
+   * <p>第 29 节从 registerAll 循环体抽出,让"启动扫描"和"运行时新增 Agent"走同一段注册代码(下节 API 建完 Agent 目录后直接调它,免重启)。 句柄存入
+   * {@link #scheduledTasks},供下节注销/更新。
+   */
+  public void registerProfile(Profile profile) {
+    for (ScheduleConfig sc : profile.getSchedules()) {
+      try {
+        // 幂等:已调度过的任务不重复注册(防 @PostConstruct + 后续重新扫描重复调度)
+        if (!scheduledTaskIds.add(sc.id())) {
+          continue;
         }
+        ZoneId zoneId = sc.zoneId();
+        CronExpression cronExpr = CronExpression.parse(sc.cron());
+        Instant nextRunAt = cronExpr.next(java.time.ZonedDateTime.now(zoneId)).toInstant();
+        // cron + 时区一起传,别让服务器时区替用户做主;捕获句柄入表(下节注销用)
+        ScheduledFuture<?> future =
+            taskScheduler.schedule(() -> runOnce(profile, sc), new CronTrigger(sc.cron(), zoneId));
+        scheduledTasks.put(sc.id(), future);
+        store.register(sc, profile.getName(), nextRunAt);
+        taskRefs.put(sc.id(), new ProfileTaskRef(profile, sc));
+        log.info(
+            "Registered schedule {} for agent {}: cron={} zone={}",
+            sc.id(),
+            profile.getName(),
+            sc.cron(),
+            sc.zone());
+      } catch (IllegalArgumentException e) {
+        // 非法 cron 只记错误不阻断启动,其余任务照常注册
+        log.error(
+            "Invalid cron for schedule {} of agent {}: {}",
+            sc.id(),
+            profile.getName(),
+            sc.cron(),
+            e);
       }
     }
   }
@@ -165,6 +185,11 @@ public class AgentScheduler {
   /** 按任务 id 拿锁,包级可见供测试模拟"上一次还占着锁"。 */
   Lock lockFor(String taskId) {
     return taskLocks.computeIfAbsent(taskId, id -> new ReentrantLock());
+  }
+
+  /** 按任务 id 取调度句柄,供测试断言句柄表(第 29 节 registerProfile 后应有句柄)。 */
+  public ScheduledFuture<?> scheduledFutureFor(String taskId) {
+    return scheduledTasks.get(taskId);
   }
 
   /** 按 cron 表达式算下次触发时刻。 */
