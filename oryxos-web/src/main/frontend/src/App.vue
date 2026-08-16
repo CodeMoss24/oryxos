@@ -7,6 +7,7 @@ const views = [
   { key: 'overview', label: '总览' },
   { key: 'agents', label: 'Agent' },
   { key: 'sessions', label: '会话列表' },
+  { key: 'schedules', label: '定时任务' },
   { key: 'tools', label: 'Tool 列表' },
   { key: 'memory', label: '长期记忆' },
   { key: 'sandbox', label: 'Sandbox 白名单' },
@@ -60,8 +61,30 @@ const sessions = useView('/api/v1/sessions', { isList: true })
 const agents = useView('/api/v1/profiles', { isList: true }) // Agent 列表 = Profile 注册表
 const tools = useView('/api/v1/tools', { isList: true })
 const memory = useView('/api/v1/memory')
+const schedules = useView('/api/v1/schedules', { isList: true })
 const providers = useView('/api/v1/info') // Provider 列表取自 /info 的 providers 连通状态
 const status = useView('/api/v1/info')
+
+async function runNow(taskId) {
+  try {
+    await fetch('/api/v1/schedules/' + taskId + '/run', { method: 'POST' })
+    schedules.load()
+  } catch (e) {
+    alert('执行失败: ' + (e.message || String(e)))
+  }
+}
+async function toggleEnabled(task) {
+  try {
+    await fetch('/api/v1/schedules/' + task.taskId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !task.enabled }),
+    })
+    schedules.load()
+  } catch (e) {
+    alert('操作失败: ' + (e.message || String(e)))
+  }
+}
 
 const loaded = ref(false)
 onMounted(() => {
@@ -69,6 +92,7 @@ onMounted(() => {
     loaded.value = true
     sessions.load()
     agents.load()
+    schedules.load()
     tools.load()
     memory.load()
     providers.load()
@@ -80,6 +104,8 @@ const activeView = computed(() => {
   switch (active.value) {
     case 'agents':
       return agents
+    case 'schedules':
+      return schedules
     case 'tools':
       return tools
     case 'memory':
@@ -191,6 +217,34 @@ function formatTime(ts) {
             <td class="mono">{{ s.userId }}</td>
             <td><span class="badge" :class="s.status === 'archived' ? 'badge-warn' : 'badge-ok'">{{ s.status }}</span></td>
             <td class="mono dim">{{ formatTime(s.lastActiveAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 定时任务列表(第 28 节:管理台第一个带写操作的页) -->
+      <table v-else-if="active === 'schedules'" class="table">
+        <thead>
+          <tr><th>任务 ID</th><th>Profile</th><th>cron</th><th>下次触发</th><th>上次结果</th><th>次数</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in schedules.data" :key="t.taskId">
+            <td class="mono">{{ t.taskId }}</td>
+            <td>{{ t.profileName }}</td>
+            <td class="mono dim">{{ t.cron }}</td>
+            <td class="mono dim">{{ formatTime(t.nextRunAt) }}</td>
+            <td>
+              <span class="badge" :class="t.lastStatus === 'success' ? 'badge-ok' : t.lastStatus === 'failed' ? 'badge-err' : 'badge-warn'">
+                {{ t.lastStatus || '—' }}
+              </span>
+            </td>
+            <td class="mono">{{ t.runCount }}</td>
+            <td><span class="badge" :class="t.enabled ? 'badge-ok' : 'badge-warn'">{{ t.enabled ? '启用' : '停用' }}</span></td>
+            <td class="action-cell">
+              <button class="btn btn-sm" @click="runNow(t.taskId)" title="立即执行一次">▶ 执行</button>
+              <button class="btn btn-sm" @click="toggleEnabled(t)" :title="t.enabled ? '停用' : '启用'">
+                {{ t.enabled ? '⏸ 停用' : '▶ 启用' }}
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -354,6 +408,7 @@ function formatTime(ts) {
   font-size: 12px;
 }
 .badge-ok { color: var(--ok); background: rgba(74, 222, 128, 0.1); }
+.badge-err { color: var(--err); background: rgba(248, 113, 113, 0.1); }
 .badge-warn { color: var(--warn); background: var(--brand-soft); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
 .dot-ok { background: var(--ok); }
@@ -444,6 +499,8 @@ function formatTime(ts) {
   font-family: var(--font-base);
 }
 .btn:hover { border-color: var(--brand); }
+.btn-sm { font-size: 11px; padding: 3px 8px; margin-right: 6px; }
+.action-cell { white-space: nowrap; }
 
 /* ── 响应式:窄屏导航收起 ── */
 @media (max-width: 768px) {

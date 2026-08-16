@@ -4,9 +4,13 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
-/** scheduled_tasks 表:定时任务登记与状态。第 28 节补齐。 */
+/**
+ * scheduled_tasks 表:定时任务登记与状态。第 28 节补齐。
+ *
+ * <p>时间字段使用 String(ISO-8601),与 sessions/llm_calls/tool_invocations 三表同口径, 避免 SQLite JDBC 对 Instant
+ * 序列化的日期解析错误。
+ */
 @Entity
 @Table(name = "scheduled_tasks")
 public class ScheduledTaskEntity {
@@ -31,10 +35,10 @@ public class ScheduledTaskEntity {
   private Boolean enabled;
 
   @Column(name = "next_run_at")
-  private Instant nextRunAt;
+  private String nextRunAt;
 
   @Column(name = "last_run_at")
-  private Instant lastRunAt;
+  private String lastRunAt;
 
   @Column(name = "last_status")
   private String lastStatus;
@@ -43,7 +47,7 @@ public class ScheduledTaskEntity {
   private Long runCount;
 
   @Column(name = "updated_at")
-  private Instant updatedAt;
+  private String updatedAt;
 
   public String getTaskId() {
     return taskId;
@@ -93,19 +97,19 @@ public class ScheduledTaskEntity {
     this.enabled = enabled;
   }
 
-  public Instant getNextRunAt() {
+  public String getNextRunAt() {
     return nextRunAt;
   }
 
-  public void setNextRunAt(Instant nextRunAt) {
+  public void setNextRunAt(String nextRunAt) {
     this.nextRunAt = nextRunAt;
   }
 
-  public Instant getLastRunAt() {
+  public String getLastRunAt() {
     return lastRunAt;
   }
 
-  public void setLastRunAt(Instant lastRunAt) {
+  public void setLastRunAt(String lastRunAt) {
     this.lastRunAt = lastRunAt;
   }
 
@@ -125,11 +129,11 @@ public class ScheduledTaskEntity {
     this.runCount = runCount;
   }
 
-  public Instant getUpdatedAt() {
+  public String getUpdatedAt() {
     return updatedAt;
   }
 
-  public void setUpdatedAt(Instant updatedAt) {
+  public void setUpdatedAt(String updatedAt) {
     this.updatedAt = updatedAt;
   }
 }
