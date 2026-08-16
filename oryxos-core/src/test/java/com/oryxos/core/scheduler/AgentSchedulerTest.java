@@ -48,6 +48,10 @@ class AgentSchedulerTest {
   void setUp() {
     // 默认启用,让既有测试不感知启停检查;需要测停用路径的测试自己覆盖
     when(store.isEnabled(anyString())).thenReturn(true);
+    // 29 节起 registerProfile 捕获 taskScheduler.schedule(...) 的 ScheduledFuture 入句柄表;
+    // mock 默认返回 null(ConcurrentHashMap 不接受 null),统一 stub 成一个非 null 句柄。
+    when(taskScheduler.schedule(any(Runnable.class), any(Trigger.class)))
+        .thenAnswer(inv -> Mockito.mock(java.util.concurrent.ScheduledFuture.class));
   }
 
   private Profile profileWith(ScheduleConfig... schedules) {

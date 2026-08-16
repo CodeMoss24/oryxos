@@ -2,13 +2,17 @@ package com.oryxos.core.profile;
 
 import com.oryxos.core.runtime.OryxOsRuntime;
 import com.oryxos.core.scheduler.ScheduleConfig;
+import com.oryxos.core.tool.ToolRegistry;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -22,9 +26,14 @@ import org.yaml.snakeyaml.Yaml;
  *   <li>frontmatter(YAML,--- 包围):这个 Agent 自己的 profile
  *   <li>正文:任务指令,交给 ContextLoader 注入 system prompt
  * </ul>
+ *
+ * <p>第 29 节:补缺必填项校验(provider.name/name 缺则抛 IllegalArgumentException 点名 Agent+字段,单 Agent 失败不阻断
+ * 其余)、资源路径识别(scripts/skills/REFERENCE.md,不进 Profile,仅供观测)、tools 未注册能力告警(非阻断)。
  */
 @Component
 public class AgentLoader {
+
+  private static final Logger log = LoggerFactory.getLogger(AgentLoader.class);
 
   private final Path agentsDir;
 
@@ -70,7 +79,19 @@ public class AgentLoader {
   /** 把 AGENT.md 的 frontmatter 派生成 Profile。 */
   @SuppressWarnings("unchecked")
   public Profile deriveProfile(String name, ParsedAgentMd parsed) {
+    // 第 29 节:必填项校验——name 与 provider.name 缺则抛 IllegalArgumentException 点名。
+    // 这是启动扫描与运行时注册共享的同一段校验(同一异常类型 + 同一消息),core 内不依赖 provider 模块。
+    if (name == null || name.isBlank()) {
+      throw new IllegalArgumentException("Agent '<unknown>': missing required field 'name'");
+    }
     Map<String, Object> front = parsed.frontmatter();
+    Map<String, Object> provider = (Map<String, Object>) front.get("provider");
+    String providerName = provider == null ? null : (String) provider.get("name");
+    if (providerName == null || providerName.isBlank()) {
+      throw new IllegalArgumentException(
+          "Agent '" + name + "': missing required field 'provider.name'");
+    }
+
     Profile profile = new Profile();
     profile.setName(name);
     profile.setDescription((String) front.get("description"));
@@ -82,12 +103,11 @@ public class AgentLoader {
               (String) identity.get("agent_name"), (String) identity.get("prompt")));
     }
 
-    Map<String, Object> provider = (Map<String, Object>) front.get("provider");
+    // provider 已在必填校验处提取(非 null,name 非空);这里只取 model/temperature 落 Profile
     if (provider != null) {
       Double temperature = provider.get("temperature") instanceof Number n ? n.doubleValue() : null;
       profile.setProvider(
-          new Profile.Provider(
-              (String) provider.get("name"), (String) provider.get("model"), temperature));
+          new Profile.Provider(providerName, (String) provider.get("model"), temperature));
     }
 
     List<String> tools = toStringList(front.get("tools"));
@@ -145,6 +165,41 @@ public class AgentLoader {
       return resolved != null ? resolved : value;
     }
     return value;
+  }
+
+  /**
+   * 第 29 节:识别一个 Agent 目录里的可选资源(scripts/ skills/ REFERENCE.md)是否存在。
+   *
+   * <p>仅作可观测结果(供 harness 断言"认出资源"),不进 Profile——渐进式披露靠正文指引 + 底座 read_file/shell 按需取用,
+   * 运行时取资源用相对工作区路径,底座读文件工具自己解析,不需要 Profile 携带绝对路径。
+   *
+   * @return key=资源名(scripts/skills/reference),value=该路径是否存在
+   */
+  public Map<String, Boolean> listResources(Path agentDir) {
+    Map<String, Boolean> resources = new LinkedHashMap<>();
+    resources.put("scripts", Files.isDirectory(agentDir.resolve("scripts")));
+    resources.put("skills", Files.isDirectory(agentDir.resolve("skills")));
+    resources.put("reference", Files.exists(agentDir.resolve("REFERENCE.md")));
+    return resources;
+  }
+
+  /**
+   * 第 29 节:tools 里引用底座未注册的能力 → 告警(不阻断)。 ToolRegistry 在 core,直接 find 查,无跨模块依赖。 装配层扫描循环对每个 Profile
+   * 调一次。方法参数注入 ToolRegistry,构造期不硬依赖。
+   */
+  public void warnUnregisteredTools(Profile profile, ToolRegistry toolRegistry) {
+    List<String> tools = profile.getTools();
+    if (tools == null || tools.isEmpty()) {
+      return;
+    }
+    for (String toolName : tools) {
+      if (toolRegistry.find(toolName).isEmpty()) {
+        log.warn(
+            "Agent '{}' references unregistered tool '{}' — load continues but this tool will be unavailable at runtime",
+            profile.getName(),
+            toolName);
+      }
+    }
   }
 
   /** 解析 AGENT.md:分离 frontmatter(YAML)和正文(Markdown)。 */
