@@ -16,6 +16,7 @@ import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -38,9 +39,16 @@ class AgentSchedulerTest {
   private final AgentService agentService = Mockito.mock(AgentService.class);
   private final SessionManager sessionManager = Mockito.mock(SessionManager.class);
   private final TaskScheduler taskScheduler = Mockito.mock(TaskScheduler.class);
+  private final ScheduledTaskStore store = Mockito.mock(ScheduledTaskStore.class);
 
   private final AgentScheduler scheduler =
-      new AgentScheduler(profileRegistry, agentService, sessionManager, taskScheduler);
+      new AgentScheduler(profileRegistry, agentService, sessionManager, taskScheduler, store);
+
+  @BeforeEach
+  void setUp() {
+    // 默认启用,让既有测试不感知启停检查;需要测停用路径的测试自己覆盖
+    when(store.isEnabled(anyString())).thenReturn(true);
+  }
 
   private Profile profileWith(ScheduleConfig... schedules) {
     Profile profile = new Profile();
@@ -137,6 +145,9 @@ class AgentSchedulerTest {
   void runOnceSurvivesException_andReleasesLock() {
     ScheduleConfig sc = scheduleConfig("task-1");
     Profile profile = profileWith(sc);
+    Session session =
+        new Session("scheduler+scheduler+" + PROFILE_NAME, PROFILE_NAME, "scheduler", "scheduler");
+    when(sessionManager.getOrCreate("scheduler", "scheduler", PROFILE_NAME)).thenReturn(session);
     when(agentService.process(any(), any())).thenThrow(new RuntimeException("boom"));
 
     // 调度器不死:异常不外抛

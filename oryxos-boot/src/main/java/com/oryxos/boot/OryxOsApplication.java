@@ -3,6 +3,7 @@ package com.oryxos.boot;
 import com.oryxos.cli.OryxOsCli;
 import com.oryxos.core.profile.AgentLoader;
 import com.oryxos.core.profile.ProfileRegistry;
+import com.oryxos.core.scheduler.AgentScheduler;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -48,12 +49,17 @@ public class OryxOsApplication implements CommandLineRunner {
   private final CommandLine commandLine;
   private final AgentLoader agentLoader;
   private final ProfileRegistry profileRegistry;
+  private final AgentScheduler agentScheduler;
 
   public OryxOsApplication(
-      CommandLine commandLine, AgentLoader agentLoader, ProfileRegistry profileRegistry) {
+      CommandLine commandLine,
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler) {
     this.commandLine = commandLine;
     this.agentLoader = agentLoader;
     this.profileRegistry = profileRegistry;
+    this.agentScheduler = agentScheduler;
   }
 
   public static void main(String[] args) {
@@ -78,6 +84,9 @@ public class OryxOsApplication implements CommandLineRunner {
     Path agentsDir = com.oryxos.core.runtime.OryxOsRuntime.resolve("agents");
     if (Files.isDirectory(agentsDir)) {
       agentLoader.scanAndRegister(profileRegistry);
+      // 定时任务登记必须在 agents 扫描之后——registerAll 读 ProfileRegistry,
+      // 早于扫描跑会扫到空集(原 @PostConstruct 触发太早,28 节接入持久化后暴露)。
+      agentScheduler.registerAll();
     }
     // 重命令路径一定有参数(chat/serve/gateway),直接派发
     commandLine.execute(args);

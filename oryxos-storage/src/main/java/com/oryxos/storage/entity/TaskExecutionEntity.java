@@ -6,9 +6,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.Instant;
 
-/** task_executions 表:定时任务每次执行历史(成功失败都记)。第 28 节补齐。 */
+/**
+ * task_executions 表:定时任务每次执行历史(成功失败都记)。第 28 节补齐。
+ *
+ * <p>时间字段使用 String(ISO-8601),与 sessions/llm_calls/tool_invocations 三表同口径。
+ */
 @Entity
 @Table(name = "task_executions")
 public class TaskExecutionEntity {
@@ -24,7 +27,7 @@ public class TaskExecutionEntity {
   private String sessionId;
 
   @Column(name = "started_at")
-  private Instant startedAt;
+  private String startedAt;
 
   @Column(name = "success")
   private Boolean success;
@@ -59,11 +62,11 @@ public class TaskExecutionEntity {
     this.sessionId = sessionId;
   }
 
-  public Instant getStartedAt() {
+  public String getStartedAt() {
     return startedAt;
   }
 
-  public void setStartedAt(Instant startedAt) {
+  public void setStartedAt(String startedAt) {
     this.startedAt = startedAt;
   }
 

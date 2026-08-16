@@ -55,6 +55,12 @@ shell:
 http:
   allowed_domains:
     - "open.feishu.cn"
+    # 第 28 节 Demo 前置:31 节两个 Demo 需要的域名白名单
+    # ① 天气源(Demo 一:查天气用 open-meteo)
+    - "api.open-meteo.com"
+    # ② 通知渠道域名(按实际渠道填——飞书/企业微信/钉钉)
+    - "*.feishu.cn"
+    # ③ 若日报靠 http_get 拉新闻,再加新闻源域名(如 newsapi.org)
 
 springdoc:
   swagger-ui:

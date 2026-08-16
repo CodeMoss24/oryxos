@@ -61,6 +61,7 @@ OryxOS 是 Spring Boot 单体应用（JDK 21 + 虚拟线程），三个触发入
 - **总览** — OryxOS 定位与五大能力预览
 - **Agent** — 当前注册的全部 Agent（一个目录 = 一个 Agent）
 - **会话列表** — 所有对话会话（CLI / Web / 定时任务共享同一存储）
+- **定时任务** — 定时任务管理（列表 + 立即执行 + 启用停用，第 28 节新增首个写操作页）
 - **Tool 列表** — 已注册工具（内置 + MCP）
 - **长期记忆** — 记忆全文（运维视图，不截断）
 - **Sandbox 白名单** — 安全边界配置视图（接入中）
@@ -233,6 +234,25 @@ curl -s localhost:8080/api/v1/sessions
 curl -s localhost:8080/api/v1/sessions/web:alice:mock-agent   # 4 条消息：user/assistant/tool/assistant
 sqlite3 .oryxos/oryxos.db "select * from llm_calls where session_id='web:alice:mock-agent';"
 sqlite3 .oryxos/oryxos.db "select * from tool_invocations where session_id='web:alice:mock-agent';"
+```
+
+### 定时任务验证（第 28 节新增定时任务子系统管理端点）
+
+```bash
+# 4) 定时任务列表（管理台"定时任务"页数据源）
+curl -s localhost:8080/api/v1/schedules
+# → [{taskId, profileName, cron, enabled, nextRunAt, lastRunAt, lastStatus, runCount}]
+
+# 5) 执行历史
+curl -s localhost:8080/api/v1/schedules/<taskId>/executions
+
+# 6) 立即执行一次（不等 cron）
+curl -s -X POST localhost:8080/api/v1/schedules/<taskId>/run
+
+# 7) 启用 / 停用
+curl -s -X PUT localhost:8080/api/v1/schedules/<taskId> \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled":false}'
 ```
 
 ---

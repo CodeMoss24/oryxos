@@ -5,7 +5,8 @@ import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileRegistry;
 import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
-import jakarta.annotation.PostConstruct;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
@@ -13,6 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +22,8 @@ import org.springframework.stereotype.Component;
  * 第三种触发源(钟推)。基于 Spring 的 TaskScheduler + CronTrigger 动态注册任务, 不用静态的 @Scheduled 注解(触发规则要按 Profile
  * 配置动态生成,编译期写死的注解做不到)。
  *
- * <p>到点触发时:拿锁、经 SessionManager 取会话、把消息交给 AgentService—— 与 CLI/Web 完全相同的入口,ReActLoop 不感知消息从哪个入口来。
+ * <p>第 28 节升级:持久化接 ScheduledTaskStore(状态+历史落 SQLite,重启不丢)、执行入口加启用检查、成功失败都记 task_executions、新增
+ * runNow(管理台"立即执行")。
  *
  * <p>并发控制:每个定时任务用一把进程内的 ReentrantLock(按任务 id 维度)防止同一任务重叠执行——上一次还没跑完,下一次触发点到了就跳过,
  * 不排队、不并行跑两份。核心阶段是单实例部署,这把锁只解决"同一进程内不重叠", 不是分布式锁(多实例协调放扩展阶段)。
@@ -41,29 +44,45 @@ public class AgentScheduler {
   private final AgentService agentService;
   private final SessionManager sessionManager;
   private final TaskScheduler taskScheduler;
+  private final ScheduledTaskStore store;
 
   private final Map<String, ReentrantLock> taskLocks = new ConcurrentHashMap<>();
+
+  /** taskId → (Profile, ScheduleConfig) 映射,供 runNow 按 id 反查。 */
+  private final Map<String, ProfileTaskRef> taskRefs = new ConcurrentHashMap<>();
+
+  /** 已注册到 taskScheduler 的 taskId 集合,防重复调度。 */
+  private final java.util.Set<String> scheduledTaskIds = ConcurrentHashMap.newKeySet();
 
   public AgentScheduler(
       ProfileRegistry profileRegistry,
       AgentService agentService,
       SessionManager sessionManager,
-      TaskScheduler taskScheduler) {
+      TaskScheduler taskScheduler,
+      ScheduledTaskStore store) {
     this.profileRegistry = profileRegistry;
     this.agentService = agentService;
     this.sessionManager = sessionManager;
     this.taskScheduler = taskScheduler;
+    this.store = store;
   }
 
-  /** 启动时扫一遍所有 Profile,把每条 schedules 配置都注册进 taskScheduler。 */
-  @PostConstruct
+  /** 启动时扫一遍所有 Profile,把每条 schedules 配置注册进 taskScheduler 并登记到 store。 */
   public void registerAll() {
     for (Profile profile : profileRegistry.list()) {
       for (ScheduleConfig sc : profile.getSchedules()) {
         try {
+          // 幂等:已调度过的任务不重复注册(防 @PostConstruct + 后续重新扫描重复调度)
+          if (!scheduledTaskIds.add(sc.id())) {
+            continue;
+          }
+          ZoneId zoneId = sc.zoneId();
+          CronExpression cronExpr = CronExpression.parse(sc.cron());
+          Instant nextRunAt = cronExpr.next(java.time.ZonedDateTime.now(zoneId)).toInstant();
           // cron + 时区一起传,别让服务器时区替用户做主
-          taskScheduler.schedule(
-              () -> runOnce(profile, sc), new CronTrigger(sc.cron(), sc.zoneId()));
+          taskScheduler.schedule(() -> runOnce(profile, sc), new CronTrigger(sc.cron(), zoneId));
+          store.register(sc, profile.getName(), nextRunAt);
+          taskRefs.put(sc.id(), new ProfileTaskRef(profile, sc));
           log.info(
               "Registered schedule {} for agent {}: cron={} zone={}",
               sc.id(),
@@ -83,26 +102,81 @@ public class AgentScheduler {
     }
   }
 
-  /** 到点触发一次:拿锁、取会话、交给 AgentService。包级可见供测试直接调用,不真等时间。 */
+  /** 到点触发一次:启停检查 → 拿锁 → 取会话 → 交给 AgentService → 记录执行。包级可见供测试直接调用。 */
   void runOnce(Profile profile, ScheduleConfig sc) {
+    if (!store.isEnabled(sc.id())) {
+      log.info("Task {} is disabled, skip this trigger", sc.id());
+      return;
+    }
     ReentrantLock lock = taskLocks.computeIfAbsent(sc.id(), id -> new ReentrantLock());
     if (!lock.tryLock()) {
       log.info("Task {} still running, skip this trigger", sc.id());
       return;
     }
+    Instant startedAt = Instant.now();
+    String sessionId = null;
+    boolean success = false;
+    String errorMessage = null;
     try {
       Session session =
           sessionManager.getOrCreate(SCHEDULER_CHANNEL, SCHEDULER_USER, profile.getName());
+      sessionId = session.getSessionId();
       agentService.process(session, sc.message());
+      success = true;
     } catch (Exception e) {
+      errorMessage = e.getMessage();
       log.error("Scheduled task {} failed", sc.id(), e);
     } finally {
       lock.unlock();
+      // 审计:成功失败都落 task_executions(与宪法 V 审计同理)
+      long durationMs = java.time.Duration.between(startedAt, Instant.now()).toMillis();
+      Instant nextRunAt = computeNext(sc);
+      store.recordExecution(
+          sc.id(), sessionId, startedAt, success, errorMessage, durationMs, nextRunAt);
     }
+  }
+
+  /** 按 taskId 立即执行一次(管理台"手动触发"),不等 cron、无视启用状态。 */
+  public void runNow(String taskId) {
+    ProfileTaskRef ref = taskRefs.get(taskId);
+    if (ref == null) {
+      throw new IllegalArgumentException("No such scheduled task: " + taskId);
+    }
+    log.info("Manual trigger: taskId={} profile={}", taskId, ref.profile.getName());
+    runOnce(ref.profile, ref.config);
+  }
+
+  /** 启用/停用任务(管理台开关)。 */
+  public void setEnabled(String taskId, boolean enabled) {
+    store.setEnabled(taskId, enabled);
+    log.info("Task {} enabled={}", taskId, enabled);
+  }
+
+  /** 列出全部任务状态(管理台列表)。 */
+  public java.util.List<ScheduledTaskView> listAll() {
+    return store.listAll();
+  }
+
+  /** 列出某任务的执行历史(按时间倒序)。 */
+  public java.util.List<TaskExecutionView> executions(String taskId) {
+    return store.executions(taskId);
   }
 
   /** 按任务 id 拿锁,包级可见供测试模拟"上一次还占着锁"。 */
   Lock lockFor(String taskId) {
     return taskLocks.computeIfAbsent(taskId, id -> new ReentrantLock());
   }
+
+  /** 按 cron 表达式算下次触发时刻。 */
+  private static Instant computeNext(ScheduleConfig sc) {
+    try {
+      return CronExpression.parse(sc.cron())
+          .next(java.time.ZonedDateTime.now(sc.zoneId()))
+          .toInstant();
+    } catch (IllegalArgumentException e) {
+      return null;
+    }
+  }
+
+  private record ProfileTaskRef(Profile profile, ScheduleConfig config) {}
 }
