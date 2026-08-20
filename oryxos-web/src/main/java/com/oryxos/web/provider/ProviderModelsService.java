@@ -1,0 +1,95 @@
+package com.oryxos.web.provider;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.oryxos.core.provider.ProviderRegistry;
+import com.oryxos.core.provider.ProviderRegistry.ProviderDef;
+import com.oryxos.web.exception.ProviderUnavailableException;
+import com.oryxos.web.exception.ResourceNotFoundException;
+import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+
+/**
+ * 按 provider name 服务端代理 OpenAI 兼容的 {@code /models} 端点,返回该 provider 下的模型 id 列表。
+ *
+ * <p>必须服务端发起——不能让浏览器直连(会暴露 api-key 且踩 CORS);api-key / base-url 取自 {@link ProviderRegistry} (与运行时建
+ * ChatModel 用的是同一套参数,显式 name→参数映射)。mock provider 无真实端点,返回占位 ["mock"]。
+ */
+@Service
+public class ProviderModelsService {
+
+  private static final String MOCK = "mock";
+  private static final String SLASH = "/";
+  private static final String PATH_V1 = "/v1";
+  private static final String PATH_MODELS = "/models";
+  private static final String VERSIONED_PATH_PATTERN = ".*/v\\d+$";
+
+  private final ProviderRegistry registry;
+  private final RestClient restClient;
+
+  public ProviderModelsService(ProviderRegistry registry, RestClient.Builder restClientBuilder) {
+    this.registry = registry;
+    this.restClient = restClientBuilder.build();
+  }
+
+  /** 列出某 provider 下的模型 id(按字母排序)。provider 不存在→404;端点不可达/缺 base-url→503。 */
+  public List<String> listModels(String providerName) {
+    ProviderDef def =
+        registry
+            .find(providerName)
+            .orElseThrow(() -> new ResourceNotFoundException("provider 不存在: " + providerName));
+    if (MOCK.equals(def.name())) {
+      return List.of("mock");
+    }
+    String baseUrl = def.baseUrl();
+    if (baseUrl == null || baseUrl.isBlank()) {
+      throw new ProviderUnavailableException("provider " + providerName + " 未配置 base-url,无法列举模型");
+    }
+    String apiKey = def.apiKey() == null ? "" : def.apiKey();
+    try {
+      ModelsResponse resp =
+          restClient
+              .get()
+              .uri(modelsUrl(baseUrl))
+              .header("Authorization", "Bearer " + apiKey)
+              .retrieve()
+              .body(ModelsResponse.class);
+      if (resp == null || resp.data() == null) {
+        return List.of();
+      }
+      return resp.data().stream().map(ModelEntry::id).filter(Objects::nonNull).sorted().toList();
+    } catch (RuntimeException e) {
+      throw new ProviderUnavailableException(
+          "无法从 provider " + providerName + " 获取模型列表: " + e.getMessage(), e);
+    }
+  }
+
+  /**
+   * 拼 OpenAI 兼容标准的 {@code /v1/models} 地址:先剥离 baseUrl 末尾的 {@code /} 与 {@code /v1}(用户填带或不带 /v1 都正确),
+   * 再统一追加 {@code /v1/models}。与 {@code OpenAiApi} 内部追加 {@code /v1/chat/completions} 的预期对齐: Provider
+   * baseUrl 约定不含 {@code /v1},两个消费者各自补完整 API 路径。 例外:剥离后仍以版本段结尾(如 GLM 的 {@code /api/paas/v4})说明版本在
+   * baseUrl 里,只补 {@code /models}。
+   */
+  private static String modelsUrl(String baseUrl) {
+    String u = baseUrl.strip();
+    while (u.endsWith(SLASH) || u.endsWith(PATH_V1)) {
+      if (u.endsWith(SLASH)) {
+        u = u.substring(0, u.length() - 1);
+      } else {
+        u = u.substring(0, u.length() - PATH_V1.length());
+      }
+    }
+    if (u.matches(VERSIONED_PATH_PATTERN)) {
+      return u + PATH_MODELS;
+    }
+    return u + PATH_V1 + PATH_MODELS;
+  }
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  record ModelsResponse(@JsonProperty("data") List<ModelEntry> data) {}
+
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  record ModelEntry(@JsonProperty("id") String id) {}
+}

@@ -6,7 +6,9 @@ import com.oryxos.core.session.SessionManager;
 import com.oryxos.web.dto.ApiResponse;
 import com.oryxos.web.dto.MessageRequest;
 import com.oryxos.web.dto.MessageResponse;
+import com.oryxos.web.dto.SessionStatsView;
 import com.oryxos.web.dto.SessionSummaryDto;
+import com.oryxos.web.dto.SessionView;
 import com.oryxos.web.exception.InvalidRequestException;
 import com.oryxos.web.exception.SessionNotFoundException;
 import java.util.List;
@@ -32,9 +34,6 @@ public class SessionApiController {
 
   /** 单条消息上限(课件定值) */
   private static final int MAX_MESSAGE_LENGTH = 32 * 1024;
-
-  /** 会话历史返回上限(课件定值) */
-  private static final int MAX_HISTORY_SIZE = 100;
 
   /** 会话列表返回上限(第 27 节定值) */
   private static final int MAX_SESSION_LIST_SIZE = 100;
@@ -71,14 +70,16 @@ public class SessionApiController {
   }
 
   @GetMapping("/{id}")
-  public ApiResponse<List<Map<String, String>>> history(@PathVariable String id) {
+  public ApiResponse<SessionView> history(@PathVariable String id) {
     Session session = getExisting(id);
-    List<Map<String, String>> messages =
-        session.getMessages().stream()
-            .skip(Math.max(0, session.getMessages().size() - MAX_HISTORY_SIZE))
-            .map(m -> Map.of("role", m.role(), "content", m.content()))
-            .toList();
-    return ApiResponse.ok(messages);
+    return ApiResponse.ok(SessionView.from(session));
+  }
+
+  /** 会话统计(概览页统计卡):活跃/归档/总数。 */
+  @GetMapping("/stats")
+  public ApiResponse<SessionStatsView> stats() {
+    com.oryxos.core.session.SessionStats s = sessionManager.stats();
+    return ApiResponse.ok(SessionStatsView.from(s.active(), s.archived()));
   }
 
   @DeleteMapping("/{id}")

@@ -1,6 +1,7 @@
 package com.oryxos.core.scheduler;
 
 import com.oryxos.core.AgentService;
+import com.oryxos.core.agent.AgentExecutionStore;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileRegistry;
 import com.oryxos.core.session.Session;
@@ -14,6 +15,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.scheduling.support.CronTrigger;
@@ -60,6 +62,13 @@ public class AgentScheduler {
    * 并存, 供下节(30)注销/更新定时任务时 future.cancel() + 移出索引,免重启。 启动扫描与运行时注册都经 registerProfile 填这张表(同一段代码)。
    */
   private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
+  /**
+   * agent_executions 记录(可选注入,不破坏既有测试构造):定时触发也记 Agent 维度执行历史(source=schedule), 与 task_executions
+   * 双轨并存——task_executions 按 task_id 供定时任务页,agent_executions 按 agent_name 供 Agent 详情页。
+   */
+  @Autowired(required = false)
+  private AgentExecutionStore agentExecutionStore;
 
   public AgentScheduler(
       ProfileRegistry profileRegistry,
@@ -137,10 +146,14 @@ public class AgentScheduler {
     String sessionId = null;
     boolean success = false;
     String errorMessage = null;
+    long execId = -1;
     try {
       Session session =
           sessionManager.getOrCreate(SCHEDULER_CHANNEL, SCHEDULER_USER, profile.getName());
       sessionId = session.getSessionId();
+      if (agentExecutionStore != null) {
+        execId = agentExecutionStore.start(profile.getName(), "schedule", startedAt);
+      }
       agentService.process(session, sc.message());
       success = true;
     } catch (Exception e) {
@@ -153,6 +166,14 @@ public class AgentScheduler {
       Instant nextRunAt = computeNext(sc);
       store.recordExecution(
           sc.id(), sessionId, startedAt, success, errorMessage, durationMs, nextRunAt);
+      // Agent 维度执行历史(source=schedule,与 task_executions 双轨并存)
+      if (agentExecutionStore != null && execId >= 0) {
+        try {
+          agentExecutionStore.finish(execId, sessionId, success, errorMessage, Instant.now());
+        } catch (RuntimeException e) {
+          log.warn("Agent 执行记录回填失败(execId={})", execId, e);
+        }
+      }
     }
   }
 

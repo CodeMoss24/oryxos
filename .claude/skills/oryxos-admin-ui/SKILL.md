@@ -32,7 +32,7 @@ OryxOS 管理台 = 托管在 `/admin` 的 Vue 3 + Vite 单页应用,只调 `/api
 - 工程位置:`oryxos-web/src/main/frontend/`;Vue 3 + Vite,与 `website/` 首页同栈,不用裸 HTML
 - `vite.config.js`:`base: '/admin/'`,`build.outDir` 指向 `../resources/static/admin`,产物相对资源路径
 - 构建串联:frontend-maven-plugin(oryxos-web/pom.xml,generate-resources 阶段 install-node-and-npm → npm install → npm run build);产物**不入库**(.gitignore),由插件打包时重建;仅后端迭代 `-Dfrontend.skip=true`
-- 数据来源:只调 `GET /api/v1/...`;统一响应信封 `{code, message, data, timestamp}`,**code≠200 或请求异常时把 message 显示给用户**
+- 数据来源:只调 `GET /api/v1/...`;统一响应信封 `{code, message, data, timestamp}`,**code≠0 或请求异常时把 message 显示给用户**(成功 code=0,对齐参考版管理台契约)
 - SPA 回落:Spring 侧 `/admin/**` 未命中文件回落 `index.html`(已由 WebConfig 的 PathResourceResolver 实现),前端路由随意切,不担心刷新 404
 - 不引入外部 UI 组件库;确需组件库时只选可被本 token 完全覆盖的 headless 方案
 

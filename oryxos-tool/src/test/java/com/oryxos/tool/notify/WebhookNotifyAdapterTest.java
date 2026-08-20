@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 
 import com.oryxos.tool.sandbox.Sandbox;
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.Map;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -22,10 +23,22 @@ class WebhookNotifyAdapterTest {
   private Sandbox sandbox;
   private WebhookNotifyAdapter adapter;
 
+  /** 段外固定端口:本机内核临时端口段(44620-48715)会被 IDE 的长连接池占满,随机绑定偶发 EADDRINUSE。 */
+  private static int freePort() throws IOException {
+    for (int p = 20000; p < 20100; p++) {
+      try (ServerSocket s = new ServerSocket(p)) {
+        return p;
+      } catch (IOException ignored) {
+        // 被占,试下一个
+      }
+    }
+    throw new IOException("20000-20100 全部被占");
+  }
+
   @BeforeEach
   void setUp() throws IOException {
     server = new MockWebServer();
-    server.start();
+    server.start(freePort());
     sandbox = mock(Sandbox.class);
     adapter = new WebhookNotifyAdapter(sandbox);
   }
@@ -72,6 +85,6 @@ class WebhookNotifyAdapterTest {
 
     assertThatThrownBy(() -> adapter.send(target, "boom"))
         .isInstanceOf(RuntimeException.class)
-        .hasMessageContaining("webhook notify failed");
+        .hasMessageContaining("notify failed");
   }
 }

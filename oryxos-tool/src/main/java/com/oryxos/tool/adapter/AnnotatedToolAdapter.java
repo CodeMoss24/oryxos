@@ -1,8 +1,8 @@
 package com.oryxos.tool.adapter;
 
+import com.oryxos.core.exception.SandboxViolationException;
 import com.oryxos.core.tool.OryxTool;
 import com.oryxos.core.tool.ToolResult;
-import com.oryxos.tool.sandbox.SandboxViolationException;
 import org.springframework.ai.model.function.FunctionCallback;
 
 /**

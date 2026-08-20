@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oryxos.core.exception.SandboxViolationException;
 import com.oryxos.tool.sandbox.FileSandboxProperties;
 import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.Sandbox;
-import com.oryxos.tool.sandbox.SandboxViolationException;
 import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.sandbox.WhitelistSandbox;
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.net.http.HttpClient;
 import java.util.List;
 import okhttp3.mockwebserver.MockResponse;
@@ -27,10 +29,22 @@ class DuckDuckGoSearchProviderTest {
 
   private MockWebServer server;
 
+  /** 段外固定端口:本机内核临时端口段(44620-48715)会被 IDE 的长连接池占满,随机绑定偶发 EADDRINUSE。 */
+  private static int freePort() throws IOException {
+    for (int p = 20000; p < 20100; p++) {
+      try (ServerSocket s = new ServerSocket(p)) {
+        return p;
+      } catch (IOException ignored) {
+        // 被占,试下一个
+      }
+    }
+    throw new IOException("20000-20100 全部被占");
+  }
+
   @BeforeEach
   void startServer() throws Exception {
     server = new MockWebServer();
-    server.start();
+    server.start(freePort());
   }
 
   @AfterEach
@@ -104,10 +118,12 @@ class DuckDuckGoSearchProviderTest {
   }
 
   private static WhitelistSandbox sandboxWithDomain(String domain) {
+    // 空/空白域名 = 空白名单(deny-all);空字符串条目会被构造校验拒绝,过滤后再进配置
+    List<String> domains = domain == null || domain.isBlank() ? List.of() : List.of(domain);
     return new WhitelistSandbox(
         new FileSandboxProperties(List.of("/")),
         new ShellSandboxProperties(List.of()),
-        new HttpSandboxProperties(List.of(domain)));
+        new HttpSandboxProperties(domains));
   }
 
   private static boolean hasTitle(List<SearchResult> results, String title) {

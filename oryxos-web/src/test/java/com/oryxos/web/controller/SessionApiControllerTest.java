@@ -67,7 +67,7 @@ class SessionApiControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"profile_name\":\"p1\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.session_id").value("s-1"));
   }
 
@@ -155,7 +155,7 @@ class SessionApiControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"content\":\"hello\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.reply").value("reply-1"));
 
     verify(agentService, times(1)).process(eq(session), eq("hello"));
@@ -190,9 +190,9 @@ class SessionApiControllerTest {
     mockMvc
         .perform(get("/api/v1/sessions/s-1"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.length()").value(100))
-        .andExpect(jsonPath("$.data[0].content").value("msg-51"))
-        .andExpect(jsonPath("$.data[99].content").value("msg-150"));
+        .andExpect(jsonPath("$.data.messages.length()").value(100))
+        .andExpect(jsonPath("$.data.messages[0].content").value("msg-51"))
+        .andExpect(jsonPath("$.data.messages[99].content").value("msg-150"));
   }
 
   @Test

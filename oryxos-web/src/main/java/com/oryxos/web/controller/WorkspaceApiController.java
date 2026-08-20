@@ -5,13 +5,22 @@ import com.oryxos.core.agent.AgentStore;
 import com.oryxos.web.dto.ApiResponse;
 import com.oryxos.web.dto.FileNode;
 import com.oryxos.web.exception.InvalidRequestException;
+import com.oryxos.web.exception.ResourceNotFoundException;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,6 +93,40 @@ public class WorkspaceApiController {
       }
     }
     return ApiResponse.ok(Map.of("message", "file saved: " + path));
+  }
+
+  /**
+   * 下载文件(二进制附件流):把 Agent {@code output/} 里的研报 / 汇总 / 导出等产出下载到本地。防目录穿越同 {@link #readFile}:越界 →
+   * 400,不存在 → 404。这里带 Content-Disposition attachment、按内容类型返回原始字节,任意文件类型都能下。
+   */
+  @GetMapping("/download")
+  public ResponseEntity<Resource> download(@RequestParam("path") String path) {
+    Path target = agentStore.resolveWorkspacePath(path);
+    if (!Files.isRegularFile(target)) {
+      throw new ResourceNotFoundException("文件不存在: " + path); // → 404
+    }
+    String filename = String.valueOf(target.getFileName());
+    // 文件名可能含中文/空格:用 RFC 5987 编码进 Content-Disposition,避免乱码或截断
+    String disposition =
+        ContentDisposition.attachment()
+            .filename(filename, StandardCharsets.UTF_8)
+            .build()
+            .toString();
+    MediaType contentType;
+    long length;
+    try {
+      String probed = Files.probeContentType(target);
+      contentType =
+          probed != null ? MediaType.parseMediaType(probed) : MediaType.APPLICATION_OCTET_STREAM;
+      length = Files.size(target);
+    } catch (IOException e) {
+      throw new UncheckedIOException("读取文件失败: " + path, e);
+    }
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+        .contentType(contentType)
+        .contentLength(length)
+        .body(new FileSystemResource(target));
   }
 
   /** agents/&lt;name&gt;/AGENT.md 恰好两段路径(直接子文件)才算"编辑 Agent 定义"。 */

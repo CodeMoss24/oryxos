@@ -107,6 +107,15 @@ public class AgentStore {
         + "产出格式:清晰、可执行;失败时说明原因并给出兜底建议。\n";
   }
 
+  /** 读取 AGENT.md 全文(管理台"基本信息"编辑先读后改)。目录不存在或不可读抛 IllegalArgumentException(→400)。 */
+  public String read(String name) {
+    try {
+      return Files.readString(agentDir(name).resolve("AGENT.md"));
+    } catch (IOException e) {
+      throw new IllegalArgumentException("Agent 目录不存在或不可读: " + name, e);
+    }
+  }
+
   /** 覆写 AGENT.md(frontmatter + 正文全文,由调用方保证内容可解析)。 */
   public void writeAgentMd(String name, String content) {
     try {

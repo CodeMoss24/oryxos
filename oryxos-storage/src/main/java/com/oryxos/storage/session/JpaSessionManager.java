@@ -2,6 +2,7 @@ package com.oryxos.storage.session;
 
 import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
+import com.oryxos.core.session.SessionStats;
 import com.oryxos.storage.entity.SessionEntity;
 import com.oryxos.storage.repository.SessionRepository;
 import java.util.Comparator;
@@ -63,6 +64,13 @@ public class JpaSessionManager implements SessionManager {
                 Session::getLastActiveAt, Comparator.nullsLast(Comparator.reverseOrder())))
         .limit(limit)
         .toList();
+  }
+
+  @Override
+  public SessionStats stats() {
+    List<SessionEntity> all = sessionRepository.findAll();
+    long active = all.stream().filter(e -> "active".equals(e.getStatus())).count();
+    return new SessionStats((int) active, (int) (all.size() - active));
   }
 
   private String buildSessionId(String channel, String user, String profileName) {

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oryxos.core.exception.ProviderNotFoundException;
 import com.oryxos.core.profile.Profile;
+import com.oryxos.core.provider.ProviderRegistry;
+import com.oryxos.core.provider.ProviderRegistry.ProviderDef;
 import com.oryxos.core.react.LlmResponse;
 import com.oryxos.core.react.Prompt;
 import com.oryxos.core.react.ProviderPort;
@@ -11,10 +13,14 @@ import com.oryxos.core.react.ToolCall;
 import com.oryxos.core.session.Message;
 import com.oryxos.storage.entity.LlmCallEntity;
 import com.oryxos.storage.repository.LlmCallRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -38,35 +44,67 @@ import org.springframework.web.client.RestClientResponseException;
  *
  * <p>工具调用路径:当有可用工具时,绕过 Spring AI FunctionCallingOptions 直接构造带 tools[] 的 API 请求发送给 LLM Provider。
  * Spring AI 1.0.0-M4 的 proxyToolCalls=false 会连 tools 都不发给 LLM,导致模型收不到工具定义无法发起 Function Calling。
+ *
+ * <p>Provider 动态化(管理台对齐):ChatModel 不再构造期冻结——配置来自 {@link ProviderRegistry}(DB 事实源), 按 (apiKey,
+ * baseUrl) 指纹缓存,注册表改配置(如换 baseUrl)后下一次调用指纹变、自动重建 ChatModel,免重启生效。 测试/兼容构造直接给 ChatModel
+ * 映射与配置(缓存恒命中,不改原路由语义)。
  */
 public class ProviderService implements ProviderPort {
 
   private static final Logger log = LoggerFactory.getLogger(ProviderService.class);
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
-  private final Map<String, ChatModel> providerMap;
-  private final Map<String, ProviderProperties.ProviderEntry> providerConfigs;
+  private final ProviderRegistry registry;
+  private final ProviderChatModelFactory modelFactory;
+  private final Map<String, ProviderProperties.ProviderEntry> legacyConfigs;
   private final RestClient.Builder restClientBuilder;
   private final ToolSchemaAdapter toolSchemaAdapter;
   private final LlmCallRepository llmCallRepository;
 
+  /** provider name → 指纹缓存的 ChatModel;指纹 = sha256(apiKey|baseUrl),指纹变即重建。 */
+  private final Map<String, CachedModel> modelCache = new ConcurrentHashMap<>();
+
+  private record CachedModel(String fingerprint, ChatModel model) {}
+
+  /** 生产构造:注册表 + 构建工厂,按指纹动态重建。 */
   public ProviderService(
-      Map<String, ChatModel> providerMap,
-      Map<String, ProviderProperties.ProviderEntry> providerConfigs,
+      ProviderRegistry registry,
+      ProviderChatModelFactory modelFactory,
       RestClient.Builder restClientBuilder,
       ToolSchemaAdapter toolSchemaAdapter,
       LlmCallRepository llmCallRepository) {
-    this.providerMap = Map.copyOf(providerMap);
-    this.providerConfigs = Map.copyOf(providerConfigs);
+    this.registry = registry;
+    this.modelFactory = modelFactory;
+    this.legacyConfigs = Map.of();
     this.restClientBuilder = restClientBuilder;
     this.toolSchemaAdapter = toolSchemaAdapter;
     this.llmCallRepository = llmCallRepository;
   }
 
+  /** 测试/兼容构造:直接给 ChatModel 映射与配置,缓存恒命中(不改原路由语义)。 */
+  public ProviderService(
+      Map<String, ChatModel> models,
+      Map<String, ProviderProperties.ProviderEntry> configs,
+      RestClient.Builder restClientBuilder,
+      ToolSchemaAdapter toolSchemaAdapter,
+      LlmCallRepository llmCallRepository) {
+    this.registry = null;
+    this.modelFactory = null;
+    this.legacyConfigs = Map.copyOf(configs);
+    this.restClientBuilder = restClientBuilder;
+    this.toolSchemaAdapter = toolSchemaAdapter;
+    this.llmCallRepository = llmCallRepository;
+    models.forEach((name, model) -> modelCache.put(name, new CachedModel("legacy-" + name, model)));
+  }
+
   @Override
   public Map<String, Boolean> connectivity() {
-    Map<String, Boolean> result = new java.util.LinkedHashMap<>();
-    providerConfigs.forEach((name, entry) -> result.put(name, probeReachable(entry.baseUrl())));
+    Map<String, Boolean> result = new LinkedHashMap<>();
+    if (registry != null) {
+      registry.list().forEach(e -> result.put(e.name(), probeReachable(e.baseUrl())));
+    } else {
+      legacyConfigs.forEach((name, entry) -> result.put(name, probeReachable(entry.baseUrl())));
+    }
     return result;
   }
 
@@ -104,11 +142,7 @@ public class ProviderService implements ProviderPort {
     String providerName = profile.getProvider().name();
     long startedAt = System.currentTimeMillis();
     try {
-      ChatModel chatModel = providerMap.get(providerName);
-      // 放在 try 内:provider 未配置也算一次失败的 LLM 调用,落审计(第 27 节对账 H4 ②)
-      if (chatModel == null) {
-        throw new ProviderNotFoundException(providerName);
-      }
+      ChatModel chatModel = resolveModel(providerName);
       LlmResponse result;
       if (chatModel instanceof MockChatModel) {
         // 第 27 节:mock 走 ChatModel 路径(工具脚本在 MockChatModel 内部驱动,ReAct 循环不感知)
@@ -143,19 +177,62 @@ public class ProviderService implements ProviderPort {
     }
   }
 
+  /**
+   * 按名解析 ChatModel:注册表取配置 → 指纹比对缓存,配置变了就重建(管理台改 provider 配置免重启生效)。 未配置的 provider 抛
+   * ProviderNotFoundException(→404 由 web 层映射)。
+   */
+  private ChatModel resolveModel(String providerName) {
+    if (registry == null) {
+      CachedModel cached = modelCache.get(providerName);
+      if (cached == null) {
+        throw new ProviderNotFoundException(providerName);
+      }
+      return cached.model();
+    }
+    ProviderDef def =
+        registry.find(providerName).orElseThrow(() -> new ProviderNotFoundException(providerName));
+    String fingerprint = fingerprint(def.apiKey(), def.baseUrl());
+    CachedModel cached = modelCache.get(providerName);
+    if (cached != null && cached.fingerprint().equals(fingerprint)) {
+      return cached.model();
+    }
+    ChatModel model = modelFactory.buildOne(def.name(), def.apiKey(), def.baseUrl());
+    modelCache.put(providerName, new CachedModel(fingerprint, model));
+    log.info("Rebuilt ChatModel for provider {} (config fingerprint changed)", providerName);
+    return model;
+  }
+
+  private static String fingerprint(String apiKey, String baseUrl) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] input =
+          (apiKey == null ? "" : apiKey + "|" + (baseUrl == null ? "" : baseUrl))
+              .getBytes(StandardCharsets.UTF_8);
+      byte[] hash = digest.digest(input);
+      StringBuilder hex = new StringBuilder();
+      for (byte b : hash) {
+        hex.append(String.format("%02x", b));
+      }
+      return hex.toString();
+    } catch (Exception e) {
+      // 指纹只是缓存键,极端失败退化为恒定值(每次重建,不破坏正确性)
+      return "fallback";
+    }
+  }
+
   /** 有工具:绕过 Spring AI,直接构造带 tools[] 的 API 请求 */
   private LlmResponse chatWithTools(
       String sessionId, Profile profile, Prompt prompt, long startedAt) {
-    var entry = providerConfigs.get(profile.getProvider().name());
-    String apiKey = entry != null ? entry.apiKey() : "";
-    String baseUrl = entry != null ? entry.baseUrl() : "";
+    ProviderDef def = configFor(profile.getProvider().name());
+    String apiKey = def != null ? def.apiKey() : "";
+    String baseUrl = def != null ? def.baseUrl() : "";
     String model = profile.getProvider().model();
 
     RestClient restClient = restClientBuilder.build();
 
     List<Map<String, Object>> tools = toolSchemaAdapter.toOpenAiTools(prompt.availableTools());
 
-    Map<String, Object> requestBody = new java.util.LinkedHashMap<>();
+    Map<String, Object> requestBody = new LinkedHashMap<>();
     requestBody.put("model", model);
     requestBody.put("messages", promptToMapList(prompt));
     requestBody.put("tools", tools);
@@ -181,6 +258,16 @@ public class ProviderService implements ProviderPort {
     } catch (JsonProcessingException e) {
       throw new RuntimeException("Failed to serialize LLM request", e);
     }
+  }
+
+  private ProviderDef configFor(String providerName) {
+    if (registry != null) {
+      return registry.find(providerName).orElse(null);
+    }
+    ProviderProperties.ProviderEntry entry = legacyConfigs.get(providerName);
+    return entry == null
+        ? null
+        : new ProviderDef(entry.name(), entry.apiKey(), entry.baseUrl(), null);
   }
 
   /**
@@ -269,7 +356,7 @@ public class ProviderService implements ProviderPort {
     return prompt.messages().stream()
         .map(
             m -> {
-              Map<String, Object> msg = new java.util.LinkedHashMap<>();
+              Map<String, Object> msg = new LinkedHashMap<>();
               msg.put("role", m.role());
               if (m.content() != null) {
                 msg.put("content", m.content());
@@ -278,10 +365,10 @@ public class ProviderService implements ProviderPort {
               if (m.toolCalls() != null && !m.toolCalls().isEmpty()) {
                 List<Map<String, Object>> tcs = new ArrayList<>();
                 for (ToolCall tc : m.toolCalls()) {
-                  Map<String, Object> tcm = new java.util.LinkedHashMap<>();
+                  Map<String, Object> tcm = new LinkedHashMap<>();
                   tcm.put("id", tc.id() != null ? tc.id() : "call_" + java.util.UUID.randomUUID());
                   tcm.put("type", "function");
-                  Map<String, Object> func = new java.util.LinkedHashMap<>();
+                  Map<String, Object> func = new LinkedHashMap<>();
                   func.put("name", tc.name());
                   func.put("arguments", tc.argumentsJson());
                   tcm.put("function", func);
@@ -378,6 +465,8 @@ public class ProviderService implements ProviderPort {
 
   /** Exposed for testing. */
   Map<String, ChatModel> providerMap() {
-    return providerMap;
+    Map<String, ChatModel> map = new LinkedHashMap<>();
+    modelCache.forEach((name, cached) -> map.put(name, cached.model()));
+    return map;
   }
 }

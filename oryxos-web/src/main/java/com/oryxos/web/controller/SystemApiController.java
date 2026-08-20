@@ -1,7 +1,10 @@
 package com.oryxos.web.controller;
 
-import com.oryxos.core.react.ProviderPort;
+import com.oryxos.core.profile.Profile;
+import com.oryxos.core.profile.ProfileRegistry;
 import com.oryxos.web.dto.ApiResponse;
+import com.oryxos.web.dto.InfoView;
+import java.util.List;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -10,37 +13,34 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 系统状态 Controller(health / info)。
  *
- * <p>info 多带一份各 Provider 的实时连通状态(经 ProviderPort 探活,探测失败/未配置安全返回"断开", 不拖垮端点本身)。
+ * <p>info 对齐参考版形状:application + 已加载 Profile 引用到的 Provider 名单(core-only 可见口径;核心阶段不做 live
+ * 探活——连通性以"已配置"为准,真实探活留扩展阶段)。
  */
 @RestController
 @RequestMapping("/api/v1")
 public class SystemApiController {
 
-  private final ProviderPort providerPort;
+  private final ProfileRegistry profileRegistry;
 
-  public SystemApiController(ProviderPort providerPort) {
-    this.providerPort = providerPort;
+  public SystemApiController(ProfileRegistry profileRegistry) {
+    this.profileRegistry = profileRegistry;
   }
 
   @GetMapping("/health")
-  public ApiResponse<Map<String, Object>> health() {
-    return ApiResponse.ok(Map.of("status", "UP"));
+  public ApiResponse<Map<String, String>> health() {
+    return ApiResponse.ok(Map.of("status", "ok"));
   }
 
   @GetMapping("/info")
-  public ApiResponse<Map<String, Object>> info() {
-    Map<String, Boolean> providers = providerPort.connectivity();
-    return ApiResponse.ok(
-        Map.of(
-            "name",
-            "OryxOS",
-            "version",
-            "1.0.0-SNAPSHOT",
-            "java",
-            System.getProperty("java.version"),
-            "time",
-            java.time.Instant.now().toString(),
-            "providers",
-            providers));
+  public ApiResponse<InfoView> info() {
+    List<String> providers =
+        profileRegistry.list().stream()
+            .map(Profile::getProvider)
+            .filter(p -> p != null && p.name() != null)
+            .map(Profile.Provider::name)
+            .distinct()
+            .sorted()
+            .toList();
+    return ApiResponse.ok(new InfoView("oryxos", providers));
   }
 }

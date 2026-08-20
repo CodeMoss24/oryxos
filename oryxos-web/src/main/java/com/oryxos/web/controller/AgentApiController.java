@@ -1,25 +1,37 @@
 package com.oryxos.web.controller;
 
 import com.oryxos.core.AgentService;
+import com.oryxos.core.agent.AgentExecutionService;
 import com.oryxos.core.agent.AgentLifecycleService;
 import com.oryxos.core.memory.MemoryService;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileRegistry;
 import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
+import com.oryxos.core.skill.AgentSkillBindingService;
+import com.oryxos.core.skill.BoundSkillDescriptor;
+import com.oryxos.core.skill.SkillCatalog;
+import com.oryxos.core.skill.SkillCatalogEntry;
+import com.oryxos.web.controller.dto.AgentSkillBindingsView;
+import com.oryxos.web.controller.dto.ReplaceSkillBindingsRequest;
 import com.oryxos.web.dto.AgentView;
 import com.oryxos.web.dto.ApiResponse;
 import com.oryxos.web.dto.CreateAgentRequest;
+import com.oryxos.web.dto.ExecutionView;
 import com.oryxos.web.dto.SessionView;
+import com.oryxos.web.dto.TriggerResponse;
+import com.oryxos.web.dto.UpdateAgentBasicRequest;
 import com.oryxos.web.dto.UpdateAgentRequest;
 import com.oryxos.web.exception.AgentTimeoutException;
 import com.oryxos.web.exception.ResourceNotFoundException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,6 +66,9 @@ public class AgentApiController {
   private final AsyncTaskExecutor taskExecutor;
   private final AgentLifecycleService lifecycle;
   private final MemoryService memoryService;
+  private final AgentExecutionService executionService;
+  private final AgentSkillBindingService skillBindings;
+  private final SkillCatalog skillCatalog;
 
   public AgentApiController(
       AgentService agentService,
@@ -61,26 +76,74 @@ public class AgentApiController {
       ProfileRegistry profileRegistry,
       AsyncTaskExecutor taskExecutor,
       AgentLifecycleService lifecycle,
-      MemoryService memoryService) {
+      MemoryService memoryService,
+      AgentExecutionService executionService) {
+    this(
+        agentService,
+        sessionManager,
+        profileRegistry,
+        taskExecutor,
+        lifecycle,
+        memoryService,
+        executionService,
+        null,
+        null);
+  }
+
+  public AgentApiController(
+      AgentService agentService,
+      SessionManager sessionManager,
+      ProfileRegistry profileRegistry,
+      AsyncTaskExecutor taskExecutor,
+      AgentLifecycleService lifecycle,
+      MemoryService memoryService,
+      AgentExecutionService executionService,
+      AgentSkillBindingService skillBindings) {
+    this(
+        agentService,
+        sessionManager,
+        profileRegistry,
+        taskExecutor,
+        lifecycle,
+        memoryService,
+        executionService,
+        skillBindings,
+        null);
+  }
+
+  @Autowired
+  public AgentApiController(
+      AgentService agentService,
+      SessionManager sessionManager,
+      ProfileRegistry profileRegistry,
+      AsyncTaskExecutor taskExecutor,
+      AgentLifecycleService lifecycle,
+      MemoryService memoryService,
+      AgentExecutionService executionService,
+      AgentSkillBindingService skillBindings,
+      SkillCatalog skillCatalog) {
     this.agentService = agentService;
     this.sessionManager = sessionManager;
     this.profileRegistry = profileRegistry;
     this.taskExecutor = taskExecutor;
     this.lifecycle = lifecycle;
     this.memoryService = memoryService;
+    this.executionService = executionService;
+    this.skillBindings = skillBindings;
+    this.skillCatalog = skillCatalog;
   }
 
   /** 创建:脚手架完整 Agent 目录 + 派生注册,失败回滚(不留半个 Agent);name 冲突/非法 → 400。 */
   @PostMapping
   public ApiResponse<AgentView> create(@RequestBody CreateAgentRequest request) {
     Profile profile = lifecycle.create(request.name(), request.description());
-    return ApiResponse.ok(AgentView.from(profile));
+    return ApiResponse.ok(view(profile));
   }
 
   /** 列表。 */
   @GetMapping
   public ApiResponse<List<AgentView>> list() {
-    return ApiResponse.ok(lifecycle.list().stream().map(AgentView::from).toList());
+    return ApiResponse.ok(lifecycle.list().stream().map(this::view).toList());
   }
 
   /** 单个详情;不存在 → 404。 */
@@ -89,7 +152,7 @@ public class AgentApiController {
     AgentView view =
         lifecycle
             .find(name)
-            .map(AgentView::from)
+            .map(this::view)
             .orElseThrow(() -> new ResourceNotFoundException("agent not found: " + name));
     return ApiResponse.ok(view);
   }
@@ -99,7 +162,7 @@ public class AgentApiController {
   public ApiResponse<AgentView> update(
       @PathVariable String name, @RequestBody UpdateAgentRequest request) {
     Profile profile = lifecycle.update(name, request.content());
-    return ApiResponse.ok(AgentView.from(profile));
+    return ApiResponse.ok(view(profile));
   }
 
   /** 删除:注销定时 → 移出索引 → 目录归档(不物理删)。 */
@@ -126,7 +189,7 @@ public class AgentApiController {
       @PathVariable String name, @RequestBody Map<String, Map<String, String>> body) {
     Map<String, String> files = body.getOrDefault("files", Map.of());
     Profile profile = lifecycle.saveFiles(name, files);
-    return ApiResponse.ok(AgentView.from(profile));
+    return ApiResponse.ok(view(profile));
   }
 
   /** 这个 Agent 的专属记忆(30 节 5.2.1,替代原全局 GET /api/v1/memory);不存在 → 404。 */
@@ -170,6 +233,146 @@ public class AgentApiController {
     String message = body.get("content");
     Session session = sessionManager.getOrCreate("web", user, name);
     return ApiResponse.ok(Map.of("reply", processWithTimeout(session, message)));
+  }
+
+  /**
+   * 修改基本信息(只改 AGENT.md frontmatter 的 description / provider.name / provider.model,正文与其余配置保留): 校验非法
+   * → 400, 写入即生效。不存在 → 404。
+   */
+  @PutMapping("/{name}/basic")
+  public ApiResponse<AgentView> updateBasic(
+      @PathVariable String name, @RequestBody UpdateAgentBasicRequest request) {
+    if (profileRegistry.find(name).isEmpty()) {
+      throw new ResourceNotFoundException("agent not found: " + name);
+    }
+    Profile profile =
+        lifecycle.updateBasicInfo(name, request.description(), request.provider(), request.model());
+    return ApiResponse.ok(view(profile));
+  }
+
+  /**
+   * 异步触发一次执行(管理台"立即执行"):先落 RUNNING 记录立即返回 executionId,真正的 ReAct 在虚拟线程后台跑(不占 HTTP 线程、不超时), 结束回填状态。
+   * 内容可空,缺省"请按你的职责执行一次任务。"。不存在 → 404。
+   */
+  @PostMapping("/{name}/trigger")
+  public ApiResponse<TriggerResponse> trigger(
+      @PathVariable String name, @RequestBody(required = false) Map<String, String> body) {
+    if (profileRegistry.find(name).isEmpty()) {
+      throw new ResourceNotFoundException("agent not found: " + name);
+    }
+    String message = body == null ? null : body.get("content");
+    String content = message == null || message.isBlank() ? "请按你的职责执行一次任务。" : message;
+    Session session = sessionManager.getOrCreate("invoke", "default", name);
+    long executionId =
+        executionService.triggerAsync(
+            name, "manual", session.getSessionId(), () -> agentService.process(session, content));
+    return ApiResponse.ok(TriggerResponse.running(executionId));
+  }
+
+  /** 执行历史(agent_executions 表,手动+定时都记;按开始时间倒序最多 50 条)。不存在 → 404。 */
+  @GetMapping("/{name}/executions")
+  public ApiResponse<List<ExecutionView>> executions(@PathVariable String name) {
+    if (profileRegistry.find(name).isEmpty()) {
+      throw new ResourceNotFoundException("agent not found: " + name);
+    }
+    return ApiResponse.ok(
+        executionService.history(name, 50).stream().map(ExecutionView::from).toList());
+  }
+
+  /** 该 Agent 当前绑定的 Skill 检查结果:绑定 + 问题(软连接不存在/越界等)。 */
+  @GetMapping("/{name}/skills")
+  public ApiResponse<AgentSkillBindingsView> skills(@PathVariable String name) {
+    requireAgent(name);
+    return ApiResponse.ok(AgentSkillBindingsView.from(requireBindings().inspect(name)));
+  }
+
+  /** 绑定一个已安装 Skill(建受控软连接);Skill 不存在 → 404,catalog 不可达 → 400。 */
+  @PutMapping("/{name}/skills/{skill}")
+  public ApiResponse<AgentSkillBindingsView> bind(
+      @PathVariable String name, @PathVariable String skill) {
+    requireAgent(name);
+    requireSkillsExist(List.of(skill));
+    validateCatalog(List.of(skill));
+    requireBindings().bind(name, skill);
+    return skills(name);
+  }
+
+  /** 解绑一个 Skill(删软连接,幂等——没绑也没关系)。 */
+  @DeleteMapping("/{name}/skills/{skill}")
+  public ApiResponse<AgentSkillBindingsView> unbind(
+      @PathVariable String name, @PathVariable String skill) {
+    requireAgent(name);
+    requireBindings().unbind(name, skill);
+    return skills(name);
+  }
+
+  /** 整组替换绑定(原子:先校验全部存在且 catalog 可达,失败不动)。 */
+  @PutMapping("/{name}/skills")
+  public ApiResponse<AgentSkillBindingsView> replaceSkills(
+      @PathVariable String name, @RequestBody ReplaceSkillBindingsRequest request) {
+    requireAgent(name);
+    List<String> desired = request == null ? List.of() : request.skills();
+    requireSkillsExist(desired);
+    validateCatalog(desired);
+    return ApiResponse.ok(
+        AgentSkillBindingsView.from(requireBindings().replaceBindings(name, desired)));
+  }
+
+  /** Profile → 对外视图;skills 取绑定检查实况(未装配绑定服务时为空列表)。 */
+  private AgentView view(Profile profile) {
+    List<String> skills =
+        skillBindings == null
+            ? List.of()
+            : skillBindings.inspect(profile.getName()).bindings().stream()
+                .map(BoundSkillDescriptor::name)
+                .toList();
+    return AgentView.from(profile, skills);
+  }
+
+  private void requireAgent(String name) {
+    if (profileRegistry.find(name).isEmpty()) {
+      throw new ResourceNotFoundException("Agent 不存在: " + name);
+    }
+  }
+
+  private AgentSkillBindingService requireBindings() {
+    if (skillBindings == null) {
+      throw new IllegalStateException("Agent Skill 绑定服务未装配");
+    }
+    return skillBindings;
+  }
+
+  private void requireSkillsExist(List<String> names) {
+    if (names == null) {
+      return;
+    }
+    AgentSkillBindingService bindings = requireBindings();
+    for (String name : names) {
+      if (!bindings.skillExists(name)) {
+        throw new ResourceNotFoundException("Skill 不存在: " + name);
+      }
+    }
+  }
+
+  private void validateCatalog(List<String> names) {
+    if (names == null || names.isEmpty()) {
+      return;
+    }
+    if (skillCatalog == null) {
+      throw new IllegalStateException("Skill catalog 不可用");
+    }
+    Map<String, SkillCatalogEntry> candidates = new LinkedHashMap<>();
+    for (SkillCatalogEntry entry : skillCatalog.query("", null)) {
+      if (candidates.putIfAbsent(entry.name(), entry) != null) {
+        throw new IllegalArgumentException("Skill catalog 存在同名公共/私有冲突: " + entry.name());
+      }
+    }
+    for (String name : names) {
+      SkillCatalogEntry entry = candidates.get(name);
+      if (entry == null || !entry.installed()) {
+        throw new IllegalArgumentException("Skill 不在可访问且已安装的 catalog 中: " + name);
+      }
+    }
   }
 
   private String processWithTimeout(Session session, String message) {

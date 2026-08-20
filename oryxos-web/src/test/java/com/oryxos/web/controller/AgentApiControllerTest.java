@@ -90,9 +90,9 @@ class AgentApiControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"weather-daily\",\"description\":\"每日天气\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.name").value("weather-daily"))
-        .andExpect(jsonPath("$.data.provider.name").value("deepseek"))
+        .andExpect(jsonPath("$.data.provider").value("deepseek"))
         .andExpect(jsonPath("$.data.schedules[0].cron").value("0 0 9 * * *"));
   }
 
@@ -169,7 +169,7 @@ class AgentApiControllerTest {
     mockMvc
         .perform(delete("/api/v1/agents/old-agent"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.message").value("agent archived: old-agent"));
 
     verify(lifecycle).delete("old-agent");
@@ -203,7 +203,7 @@ class AgentApiControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"每天早上推送天气\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(200))
+        .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data['AGENT.md']").value("---\nname: daily-weather\n---\n正文"));
   }
 

@@ -25,4 +25,7 @@ public interface SessionManager {
 
   /** 列出最近 N 个会话,按 lastActiveAt 倒序。供会话列表端点(默认 100 条)使用。 */
   List<Session> listRecent(int limit);
+
+  /** 会话统计:活跃/归档/总数。供管理台概览统计卡。 */
+  SessionStats stats();
 }

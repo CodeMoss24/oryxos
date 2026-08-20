@@ -20,7 +20,7 @@ spring:
       ddl-auto: update
     properties:
       hibernate:
-        dialect: com.oryxos.storage.config.SQLiteDialect
+        dialect: org.hibernate.community.dialect.SQLiteDialect
     open-in-view: false
 
 oryxos:

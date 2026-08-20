@@ -17,8 +17,32 @@ public class ToolRegistry {
 
   private final Map<String, OryxTool> tools = new LinkedHashMap<>();
 
+  /** 工具名 -> 所属 MCP server 名(仅 MCP 来源的工具在内);MCP server 断开/删除时按此注销它注册过的工具。 */
+  private final Map<String, String> mcpToolOwners = new LinkedHashMap<>();
+
   public void register(OryxTool tool) {
     tools.put(tool.getName(), tool);
+  }
+
+  /** 注册一个 MCP server 提供的工具并记录 owner;断开该 server 时按 owner 注销。 */
+  public void registerMcpTool(String serverName, OryxTool tool) {
+    register(tool);
+    mcpToolOwners.put(tool.getName(), serverName);
+  }
+
+  /** 注销一个工具(MCP server 断开/删除时用);未注册的名字幂等跳过。 */
+  public void unregister(String name) {
+    tools.remove(name);
+    mcpToolOwners.remove(name);
+  }
+
+  /** 工具名 -> 所属 MCP server 名(仅 MCP 来源的工具在内)。 */
+  public Map<String, String> mcpToolOwners() {
+    return Map.copyOf(mcpToolOwners);
+  }
+
+  public boolean contains(String name) {
+    return tools.containsKey(name);
   }
 
   public Optional<OryxTool> find(String name) {

@@ -27,6 +27,12 @@
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
         </dependency>
+        <!-- SQLite 的完整 Hibernate 方言(含 limit 等;自定义最小方言缺 limit handler,
+             Spring Data exists 派生查询生成 fetch first 会报语法错误) -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-community-dialects</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * Agent 生命周期编排者(第 30 节)——本节唯一的新能力:把 29 节立好的原语(deriveProfile、register/remove、registerProfile +
@@ -182,6 +184,49 @@ public class AgentLifecycleService {
     Map<String, String> files = new LinkedHashMap<>();
     files.put("AGENT.md", content);
     return files;
+  }
+
+  /**
+   * 只改 AGENT.md frontmatter 的 description / provider.name / provider.model(管理台"基本信息"编辑): 解析 → 改
+   * frontmatter Map → 重新 dump YAML → 走 {@link #update}(先校验后落盘,非法 400 不写坏目录,写入即生效)。 skill 绑定不写回
+   * AGENT.md(参考版约定:绑定是软连接,与 frontmatter 无关)。
+   */
+  public Profile updateBasicInfo(String name, String description, String provider, String model) {
+    ParsedAgentMd parsed = agentLoader.parseAgentMd(agentStore.read(name));
+    // parseAgentMd 的 frontmatter 可能不可变(空 frontmatter 时是 Map.of),统一复制成可变保序 Map
+    Map<String, Object> fm = new LinkedHashMap<>(parsed.frontmatter());
+    if (description != null) {
+      String d = description.strip();
+      if (d.isEmpty()) {
+        fm.remove("description");
+      } else {
+        fm.put("description", d);
+      }
+    }
+    if (provider != null && !provider.isBlank()) {
+      Map<String, Object> pm = providerMap(fm);
+      pm.put("name", provider.strip());
+      if (model != null && !model.isBlank()) {
+        pm.put("model", model.strip());
+      }
+      fm.put("provider", pm);
+    } else if (model != null && !model.isBlank()) {
+      Map<String, Object> pm = providerMap(fm);
+      pm.put("model", model.strip());
+      fm.put("provider", pm);
+    }
+    DumperOptions opts = new DumperOptions();
+    opts.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+    String newMarkdown =
+        "---\n" + new Yaml(opts).dump(fm) + "---\n\n" + parsed.body().strip() + "\n";
+    return update(name, newMarkdown);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> providerMap(Map<String, Object> fm) {
+    return fm.get("provider") instanceof Map
+        ? new LinkedHashMap<>((Map<String, Object>) fm.get("provider"))
+        : new LinkedHashMap<>();
   }
 
   /** 保存一组文件并生效(5.2.4):先校验 AGENT.md 可解析(非法 400,不写坏目录)→ 覆写后重注册(schedules 变更先注销旧的)→ 其余文件直接写盘。 */

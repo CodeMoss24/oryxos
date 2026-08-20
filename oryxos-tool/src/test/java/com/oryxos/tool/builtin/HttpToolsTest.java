@@ -12,6 +12,8 @@ import com.oryxos.tool.sandbox.FileSandboxProperties;
 import com.oryxos.tool.sandbox.HttpSandboxProperties;
 import com.oryxos.tool.sandbox.ShellSandboxProperties;
 import com.oryxos.tool.sandbox.WhitelistSandbox;
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.util.List;
 import okhttp3.mockwebserver.MockResponse;
@@ -44,12 +46,24 @@ class HttpToolsTest {
     ToolTestFixture.stop();
   }
 
+  /** 段外固定端口:本机内核临时端口段(44620-48715)会被 IDE 的长连接池占满,随机绑定偶发 EADDRINUSE。 */
+  private static int freePort() throws IOException {
+    for (int p = 20000; p < 20100; p++) {
+      try (ServerSocket s = new ServerSocket(p)) {
+        return p;
+      } catch (IOException ignored) {
+        // 被占,试下一个
+      }
+    }
+    throw new IOException("20000-20100 全部被占");
+  }
+
   @Test
   @DisplayName("http_get:正常能跑通(MockWebServer 假端点)")
   void httpGetWorks() throws Exception {
     try (MockWebServer server = new MockWebServer()) {
       server.enqueue(new MockResponse().setBody("{\"ok\":true}"));
-      server.start();
+      server.start(freePort());
       ToolResult r =
           executeAgainstMock(server, "http_get", "{\"url\":\"" + server.url("/weather") + "\"}");
       assertTrue(r.success(), () -> "expected success but got: " + r.errorMessage());
@@ -62,7 +76,7 @@ class HttpToolsTest {
   void httpPostWorks() throws Exception {
     try (MockWebServer server = new MockWebServer()) {
       server.enqueue(new MockResponse().setBody("accepted"));
-      server.start();
+      server.start(freePort());
       ToolResult r =
           executeAgainstMock(
               server, "http_post", "{\"url\":\"" + server.url("/report") + "\",\"body\":\"{}\"}");
@@ -77,7 +91,7 @@ class HttpToolsTest {
     // fixture 沙箱域名白名单不含 localhost;URL 指向 MockWebServer——若校验失效请求会到达 server,计数即 >0
     try (MockWebServer server = new MockWebServer()) {
       server.enqueue(new MockResponse().setBody("secret"));
-      server.start();
+      server.start(freePort());
       ToolResult r =
           ToolTestFixture.registry()
               .find("http_get")
