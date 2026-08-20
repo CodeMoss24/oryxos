@@ -32,12 +32,12 @@ OryxOS 是 **Java 原生、面向严监管企业、私有可审计的 Agent OS**
 
 | 模块 | 职责 |
 |------|------|
-| `oryxos-core` | 核心抽象:`OryxTool` 接口、`Session`、`Profile`、`ContextLoader`、`AgentLoader`(扫 `.oryxos/agents/`、`deriveProfile`)、`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`AgentScheduler` |
+| `oryxos-core` | 核心抽象:`OryxTool` 接口、`Session`、`Profile`、`ContextLoader`、`AgentLoader`(扫 `.oryxos/agents/`、`deriveProfile`)、`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`AgentScheduler`、`AgentLifecycleService`、`AgentStore`、`WorkspaceWatcher`、`ToolExecutionContext` |
 | `oryxos-provider` | `ProviderService`、Function Calling 适配、provider name → `ChatModel` **显式映射** |
 | `oryxos-memory` | `MemoryService` 统一门面、`LongTermMemory`(三档后端)、`MemoryTools` |
 | `oryxos-tool` | 内置 Tool(`FileTools`/`ShellTools`/`HttpTools`/`MemoryTools`/`NotifyTools`)、`McpClientService`、`McpToolAdapter`、`ToolRegistry`、`Sandbox` + `WhitelistSandbox`、`NotifyChannelAdapter` + `WebhookNotifyAdapter`(**三合一模块,不拆**) |
 | `oryxos-channel-cli` | `CliChannel`、`oryxos chat` |
-| `oryxos-web` | `WebServer`、6 个 `ApiController`、`GlobalExceptionHandler`、OpenAPI |
+| `oryxos-web` | `WebServer`、6 个 `ApiController`(+`AgentApiController` 管理端点、`WorkspaceApiController`)、`GlobalExceptionHandler`、OpenAPI |
 | `oryxos-storage` | SQLite、各 Repository |
 | `oryxos-cli` | Picocli 主入口、12 个子命令、`ConfigLoader` |
 | `oryxos-boot` | Spring Boot 启动模块 |
@@ -104,6 +104,7 @@ OryxOS 是 **Java 原生、面向严监管企业、私有可审计的 Agent OS**
 - `## 归档记忆`:截断 + 关键词检索
 - `save_memory(content, scope)` 的 `scope` 由 Agent 显式指定(`CORE` / `ARCHIVAL`),系统不猜
 - 三档后端靠 `memory.backend` 切换:`MarkdownMemoryStore`(默认)/ `SqliteMemoryStore`/ `Mem0MemoryStore`,上层代码不动
+- 第 30 节起记忆 **per-agent**:`ToolExecutionContext` 有 Agent 名时读写 `agents/<name>/MEMORY.md`,无上下文回退全局 `memory/MEMORY.md`(`LongTermMemoryStore` SPI 与三档后端契约不变)
 
 ## 六、ReAct Loop 机制
 
@@ -204,7 +205,11 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 | Agent 调用 | `POST /api/v1/agents/{name}/invoke` | 无状态调用 |
 | Profile 信息 | `GET /api/v1/profiles` | 列 Profile |
 | 会话管理 | `GET /api/v1/sessions` | 会话列表(只读扩展) |
-| Memory 操作 | `GET /api/v1/memory` | 长期记忆全文(不截断) |
+| Agent 管理 | `POST /api/v1/agents`、`GET /api/v1/agents`、`GET/PUT/DELETE /api/v1/agents/{name}` | 创建(脚手架+派生注册)/列表/详情/覆写/归档 |
+| Agent 管理 | `POST /api/v1/agents/{name}/generate-files`、`/files` | 一句话生成草稿(不落盘)/保存一组文件并生效 |
+| Agent 管理 | `GET /api/v1/agents/{name}/memory` | 该 Agent 的长期记忆全文(不截断;per-agent,取代原全局 `/api/v1/memory`) |
+| Agent 管理 | `GET /api/v1/agents/{name}/session`、`POST /{name}/session/messages` | 固定会话(channel=admin, user=console,上下文累积) |
+| 工作区 | `GET /api/v1/workspace/tree`、`GET/POST /api/v1/workspace/file?path=` | 目录树 / 读写文件(防目录穿越,AGENT.md 走 lifecycle.update) |
 | Tool 信息 | `GET /api/v1/tools` | 列可用 Tool |
 | 系统状态 | `GET /api/v1/health` | 健康检查 |
 | 系统状态 | `GET /api/v1/info` | 运行信息 |

@@ -5,7 +5,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.oryxos.core.agent.ToolExecutionContext;
 import com.oryxos.core.memory.MemoryScope;
+import com.oryxos.core.session.Session;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,13 +20,17 @@ class MemoryServiceImplTest {
   private final MemoryServiceImpl service = new MemoryServiceImpl(store);
 
   @Test
-  @DisplayName("buildContext返回store.load内容_不拼会话历史")
+  @DisplayName("buildContext按session的profileName_置入Agent上下文_转发store.load_复原现场")
   void buildContextDelegatesToStoreLoad() {
     when(store.load()).thenReturn("## 核心记忆\n用户叫小王\n## 归档记忆\n偏好 Java");
+    Session session = new Session("s1", "weather", "admin", "console");
 
-    String context = service.buildContext(null);
+    String context = service.buildContext(session);
 
     assertThat(context).contains("用户叫小王").contains("偏好 Java");
+    verify(store).load();
+    // 代理后复原:不污染同线程后续调用
+    assertThat(ToolExecutionContext.get()).isNull();
   }
 
   @Test

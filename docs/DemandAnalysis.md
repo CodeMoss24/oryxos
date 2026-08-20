@@ -417,7 +417,7 @@ Web Service 是 OryxOS 的对外完整门面，业务系统通过 REST API 接�
 | 会话管理 | `DELETE /api/v1/sessions/{id}` | 归档会话 |
 | Agent 调用 | `POST /api/v1/agents/{name}/invoke` | 无状态调用 |
 | Profile 信息 | `GET /api/v1/profiles` | 列 Profile |
-| Memory 操作 | `GET /api/v1/memory` | 查长期记忆 |
+| Memory 操作 | `GET /api/v1/agents/{name}/memory` | 查该 Agent 的长期记忆（第 30 节起 per-agent，取代全局 `/api/v1/memory`） |
 | Tool 信息 | `GET /api/v1/tools` | 列可用 Tool |
 | 系统状态 | `GET /api/v1/health` | 健康检查 |
 | 系统状态 | `GET /api/v1/info` | 运行信息 |

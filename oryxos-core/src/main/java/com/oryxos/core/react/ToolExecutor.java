@@ -1,5 +1,6 @@
 package com.oryxos.core.react;
 
+import com.oryxos.core.agent.ToolExecutionContext;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.tool.OryxTool;
 import com.oryxos.core.tool.ToolRegistry;
@@ -43,6 +44,9 @@ public class ToolExecutor {
       return "Tool '" + call.name() + "' not found";
     }
     try {
+      // 工具执行前置入当前 Agent 名:save_memory/recall_memory 等据此落到 agents/<name>/MEMORY.md(30 节 per-agent
+      // 记忆)
+      ToolExecutionContext.set(profile.getName());
       ToolResult result = tool.get().execute(call.argumentsJson());
       long durationMs = System.currentTimeMillis() - startedAt;
       if (result.success()) {
@@ -66,6 +70,9 @@ public class ToolExecutor {
           sessionId, call.name(), call.argumentsJson(), null, false, e.getMessage(), durationMs);
       log.error("Tool execution error: {}", call.name(), e);
       return "Tool error: " + e.getMessage();
+    } finally {
+      // 无论成败都清除上下文,防 ThreadLocal 泄漏到同线程的后续调用
+      ToolExecutionContext.clear();
     }
   }
 }

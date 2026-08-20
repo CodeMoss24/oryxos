@@ -192,6 +192,29 @@ public class AgentScheduler {
     return scheduledTasks.get(taskId);
   }
 
+  /**
+   * 注销一个 Profile 的全部定时任务(第 30 节:删除/更新/归档 Agent 的前置动作)。
+   *
+   * <p>对每条 schedule:从 {@link #scheduledTasks} 取句柄调 cancel(false)(不中断正在跑的那次触发), 并从
+   * scheduledTasks/taskRefs/scheduledTaskIds 三个索引移除——scheduledTaskIds 必须同步清,否则 update 后重新
+   * registerProfile 会被幂等检查挡住、新 cron 不生效。不动 taskLocks(课件口径:锁条目可复用,防重叠语义不变)。
+   *
+   * <p>schedules 为空或任务未注册时静默跳过(幂等,重复注销无害)。
+   */
+  public void unregisterProfile(Profile profile) {
+    for (ScheduleConfig sc : profile.getSchedules()) {
+      ScheduledFuture<?> future = scheduledTasks.get(sc.id());
+      if (future == null) {
+        continue; // 未注册过(如非法 cron 注册失败的),无需注销
+      }
+      future.cancel(false);
+      scheduledTasks.remove(sc.id());
+      taskRefs.remove(sc.id());
+      scheduledTaskIds.remove(sc.id());
+      log.info("Unregistered schedule {} for agent {}", sc.id(), profile.getName());
+    }
+  }
+
   /** 按 cron 表达式算下次触发时刻。 */
   private static Instant computeNext(ScheduleConfig sc) {
     try {

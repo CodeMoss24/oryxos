@@ -422,7 +422,7 @@ Web Service 是 OryxOS 的对外完整门面，业务系统通过 REST API 接�
 **Profile / Memory / Tool 信息（3 个）：**
 
 1. `GET /api/v1/profiles`
-2. `GET /api/v1/memory`（长期记忆全文，不截断）
+2. `GET /api/v1/agents/{name}/memory`（该 Agent 的长期记忆全文，不截断；第 30 节起记忆 per-agent，取代原全局 `GET /api/v1/memory`）
 3. `GET /api/v1/tools`
 
 **系统状态（2 个）：**

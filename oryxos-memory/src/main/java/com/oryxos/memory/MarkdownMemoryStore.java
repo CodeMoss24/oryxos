@@ -1,5 +1,6 @@
 package com.oryxos.memory;
 
+import com.oryxos.core.agent.ToolExecutionContext;
 import com.oryxos.core.memory.MemoryScope;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -11,7 +12,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * 默认后端。底层操作 .oryxos/memory/MEMORY.md 一个 Markdown 文件, 按 "## 核心记忆" / "## 归档记忆" 两个 header 分区。
+ * 默认后端。底层操作一个 Markdown 文件, 按 "## 核心记忆" / "## 归档记忆" 两个 header 分区。
+ *
+ * <p>第 30 节 per-agent 记忆:有 Agent 上下文(ToolExecutionContext)时操作
+ * .oryxos/agents/&lt;name&gt;/MEMORY.md(与 AGENT.md/skills 同目录),无上下文回退全局
+ * .oryxos/memory/MEMORY.md——LongTermMemoryStore SPI 契约不变,只动文件定位。
  *
  * <p>零依赖、人可读、git 可跟踪,记忆量不大时的首选。
  *
@@ -29,7 +34,7 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   private static final String ARCHIVAL_HEADER = "## 归档记忆";
   private static final int MAX_ARCHIVE_CHARS = 4000; // 阈值只管归档区
 
-  private final Path memoryFile;
+  private final Path workspace;
 
   /**
    * 工作区根:优先 oryxos.root 系统属性(27 节 OryxOsRuntime 同口径),回落到 oryxos.workspace, 再默认 ".oryxos"。
@@ -37,18 +42,27 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
    */
   public MarkdownMemoryStore(
       @Value("${oryxos.root:${oryxos.workspace:.oryxos}}") String workspace) {
-    this.memoryFile = Path.of(workspace, "memory", "MEMORY.md");
+    this.workspace = Path.of(workspace);
+  }
+
+  /** 按当前 Agent 上下文解析记忆文件:agents/&lt;name&gt;/MEMORY.md,无上下文回退全局 memory/MEMORY.md。 */
+  private Path memoryFile() {
+    String agentName = ToolExecutionContext.get();
+    if (agentName != null) {
+      return workspace.resolve("agents").resolve(agentName).resolve("MEMORY.md");
+    }
+    return workspace.resolve("memory").resolve("MEMORY.md");
   }
 
   @Override
   public synchronized void append(String content, MemoryScope scope) {
     try {
       ensureFile();
-      String existing = Files.readString(memoryFile);
+      String existing = Files.readString(memoryFile());
       String header = scope == MemoryScope.CORE ? CORE_HEADER : ARCHIVAL_HEADER;
       String line = "\n- [" + LocalDate.now() + "] " + content;
       String updated = insertLine(existing, header, line);
-      Files.writeString(memoryFile, updated);
+      Files.writeString(memoryFile(), updated);
     } catch (IOException e) {
       throw new RuntimeException("Failed to append memory", e);
     }
@@ -57,8 +71,8 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   @Override
   public synchronized String load() {
     try {
-      if (!Files.exists(memoryFile)) return "";
-      String raw = Files.readString(memoryFile); // 每次重新读——契约一
+      if (!Files.exists(memoryFile())) return "";
+      String raw = Files.readString(memoryFile()); // 每次重新读——契约一
       String core = extractSection(raw, CORE_HEADER); // 核心区:完整返回
       String archive = truncateIfNeeded(extractSection(raw, ARCHIVAL_HEADER));
       String result = (core + "\n" + archive).trim();
@@ -71,8 +85,8 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   @Override
   public synchronized String readAll() {
     try {
-      if (!Files.exists(memoryFile)) return "";
-      return Files.readString(memoryFile); // 原样全文,不做分区提取与截断
+      if (!Files.exists(memoryFile())) return "";
+      return Files.readString(memoryFile()); // 原样全文,不做分区提取与截断
     } catch (IOException e) {
       return "";
     }
@@ -81,8 +95,8 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   @Override
   public synchronized List<String> recallByKeyword(String keyword) {
     try {
-      if (!Files.exists(memoryFile)) return List.of();
-      String archive = extractSection(Files.readString(memoryFile), ARCHIVAL_HEADER);
+      if (!Files.exists(memoryFile())) return List.of();
+      String archive = extractSection(Files.readString(memoryFile()), ARCHIVAL_HEADER);
       return archive.lines().filter(line -> line.contains(keyword)).toList(); // 契约四
     } catch (IOException e) {
       return List.of();
@@ -90,10 +104,10 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   }
 
   private void ensureFile() throws IOException {
-    Files.createDirectories(memoryFile.getParent());
-    if (!Files.exists(memoryFile)) {
+    Files.createDirectories(memoryFile().getParent());
+    if (!Files.exists(memoryFile())) {
       String initial = "# Memory\n\n" + CORE_HEADER + "\n\n" + ARCHIVAL_HEADER + "\n";
-      Files.writeString(memoryFile, initial);
+      Files.writeString(memoryFile(), initial);
     }
   }
 

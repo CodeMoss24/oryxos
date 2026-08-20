@@ -96,8 +96,9 @@ class MockAgentE2ETest {
     Map<String, Object> data = (Map<String, Object>) resp.getBody().get("data");
     assertThat(data.get("reply")).isEqualTo("好的，已记住：我是E2E用户");
 
-    // 记忆真实写入临时工作区 MEMORY.md 归档区
-    String memory = Files.readString(WORKSPACE.resolve("memory/MEMORY.md"), StandardCharsets.UTF_8);
+    // 记忆真实写入临时工作区(第 30 节起 per-agent:agents/<name>/MEMORY.md 归档区)
+    String memory =
+        Files.readString(WORKSPACE.resolve("agents/mock-agent/MEMORY.md"), StandardCharsets.UTF_8);
     assertThat(memory).contains("## 归档记忆").contains("我是E2E用户");
 
     // 会话列表(第 27 节升级的摘要端点)能查到本次会话

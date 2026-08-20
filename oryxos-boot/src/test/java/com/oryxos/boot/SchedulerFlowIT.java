@@ -93,7 +93,7 @@ class SchedulerFlowIT {
   @Autowired private ToolInvocationRepository toolInvocationRepository;
 
   @BeforeAll
-  static void startWebhookReceiver() throws IOException {
+  static void startWebhookReceiverAndWriteAgent() throws IOException {
     webhookReceiver = HttpServer.create(new InetSocketAddress(0), 0);
     webhookReceiver.createContext(
         "/",
@@ -106,6 +106,13 @@ class SchedulerFlowIT {
     webhookReceiver.setExecutor(Executors.newSingleThreadExecutor());
     webhookReceiver.start();
     webhookPort = webhookReceiver.getAddress().getPort();
+    // 顺序关键:必须先启动接收端拿到端口,再写 AGENT.md——28 节交付时在静态初始化里拼 URL,
+    // 彼时 webhookPort 还是默认 0,notify 推往 http://localhost:0 必然连接失败,
+    // NotifyTools catch 后静默返回 failure,断言只见 success=false(出生即带病,IT 显式跑才暴露)
+    String url = "http://localhost:" + webhookPort;
+    String agentMd = AGENT_MD_TEMPLATE.replace("WEBHOOK_URL_PLACEHOLDER", url);
+    Files.writeString(
+        WORKSPACE.resolve("agents/scheduler-flow/AGENT.md"), agentMd, StandardCharsets.UTF_8);
   }
 
   @AfterAll
@@ -141,7 +148,8 @@ class SchedulerFlowIT {
 
     // ② 会话复用:再次触发,同一 session_id(两次触发后 session 仍是一条)
     rest.postForEntity("/api/v1/schedules/flow-schedule/run", null, Map.class);
-    String sessionId = "scheduler+scheduler+scheduler-flow";
+    // 与 SessionManager.buildSessionId 的 ":" 分隔一致(28 节交付时误写 "+",本节显式跑 IT 暴露)
+    String sessionId = "scheduler:scheduler:scheduler-flow";
 
     // ③ 逐表对账:llm_calls 至少 2 条(工具调用轮+收尾轮)、全成功
     List<LlmCallEntity> llmRows = llmCallRepository.findBySessionId(sessionId);
@@ -186,9 +194,8 @@ class SchedulerFlowIT {
       Path dir = Files.createTempDirectory("oryxos-flow-it-");
       Path agents = dir.resolve("agents/scheduler-flow");
       Files.createDirectories(agents);
-      String url = "http://localhost:" + webhookPort;
-      String agentMd = AGENT_MD_TEMPLATE.replace("WEBHOOK_URL_PLACEHOLDER", url);
-      Files.writeString(agents.resolve("AGENT.md"), agentMd, StandardCharsets.UTF_8);
+      // AGENT.md 不在静态初始化写:webhook 端口要等 @BeforeAll 启动接收端才有值,
+      // 由 startWebhookReceiverAndWriteAgent 在拿到端口后写入
       return dir;
     } catch (IOException e) {
       throw new IllegalStateException("Failed to create temp workspace", e);
