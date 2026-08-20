@@ -191,8 +191,14 @@ public class ProviderService implements ProviderPort {
       String sessionId, Profile profile, Prompt prompt, ChatModel chatModel, long startedAt) {
     List<org.springframework.ai.chat.messages.Message> messages = toSpringAiMessages(prompt);
 
+    // 模型名必须进请求 options:19 节重构把 16 节原版的 withModel 丢了,无工具路径会发 model 缺失的请求,
+    // 真 provider 直接 400 "missing field model"(ProviderSmokeIT 显式跑才暴露)。
     org.springframework.ai.chat.prompt.Prompt springPrompt =
-        new org.springframework.ai.chat.prompt.Prompt(messages);
+        new org.springframework.ai.chat.prompt.Prompt(
+            messages,
+            org.springframework.ai.openai.OpenAiChatOptions.builder()
+                .withModel(profile.getProvider().model())
+                .build());
 
     ChatResponse response = chatModel.call(springPrompt);
 

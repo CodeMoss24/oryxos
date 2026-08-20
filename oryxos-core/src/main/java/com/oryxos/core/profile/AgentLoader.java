@@ -203,9 +203,16 @@ public class AgentLoader {
   }
 
   /** 解析 AGENT.md:分离 frontmatter(YAML)和正文(Markdown)。 */
-  @SuppressWarnings("unchecked")
   public ParsedAgentMd parseAgentMd(Path agentMd) throws IOException {
-    String content = Files.readString(agentMd);
+    return parseAgentMd(Files.readString(agentMd));
+  }
+
+  /**
+   * 解析 AGENT.md 内容(字符串):分离 frontmatter 和正文。第 30 节:生成草稿与覆写内容必须先于落盘校验(非法 → 400 不写坏目录), 只给 Path
+   * 版本做不到——生成链路没有文件可读。
+   */
+  @SuppressWarnings("unchecked")
+  public ParsedAgentMd parseAgentMd(String content) {
     String frontmatter;
     String body;
     if (content.startsWith("---")) {

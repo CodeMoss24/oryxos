@@ -140,8 +140,10 @@ class ScheduledTaskE2ETest {
     assertThat(executions.get(0).get("success")).isEqualTo(true);
     assertThat(executions.get(0).get("taskId")).isEqualTo("e2e-schedule");
 
-    // ⑤ 记忆写入:MEMORY.md 查得到(因为 mock 触发了 save_memory)
-    String memory = Files.readString(WORKSPACE.resolve("memory/MEMORY.md"), StandardCharsets.UTF_8);
+    // ⑤ 记忆写入:MEMORY.md 查得到(因为 mock 触发了 save_memory;第 30 节起 per-agent)
+    String memory =
+        Files.readString(
+            WORKSPACE.resolve("agents/scheduler-e2e/MEMORY.md"), StandardCharsets.UTF_8);
     assertThat(memory).contains("第28节定时任务E2E测试");
 
     // ⑥ PUT /schedules/{id} 停用 → 列表显示已停用

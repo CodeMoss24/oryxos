@@ -30,6 +30,9 @@ public class WebConfig implements WebMvcConfigurer {
     // /admin 重定向到 /admin/,/admin/ 转发到 index.html
     registry.addViewController("/admin").setViewName("redirect:/admin/");
     registry.addViewController("/admin/").setViewName("forward:/admin/index.html");
+    // 根路径:欢迎页机制找不到 static 根下的 index.html(管理台在 /admin/ 下),
+    // 不接管会落到 NoResourceFoundException 被 GlobalExceptionHandler 报成 500
+    registry.addViewController("/").setViewName("redirect:/admin/");
   }
 
   @Override

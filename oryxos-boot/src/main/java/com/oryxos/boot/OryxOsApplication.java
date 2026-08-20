@@ -1,6 +1,7 @@
 package com.oryxos.boot;
 
 import com.oryxos.cli.OryxOsCli;
+import com.oryxos.core.agent.WorkspaceWatcher;
 import com.oryxos.core.profile.AgentLoader;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileRegistry;
@@ -57,6 +58,7 @@ public class OryxOsApplication implements CommandLineRunner {
   private final AgentScheduler agentScheduler;
   private final ProviderPort providerPort;
   private final ToolRegistry toolRegistry;
+  private final WorkspaceWatcher workspaceWatcher;
 
   public OryxOsApplication(
       CommandLine commandLine,
@@ -64,13 +66,15 @@ public class OryxOsApplication implements CommandLineRunner {
       ProfileRegistry profileRegistry,
       AgentScheduler agentScheduler,
       ProviderPort providerPort,
-      ToolRegistry toolRegistry) {
+      ToolRegistry toolRegistry,
+      WorkspaceWatcher workspaceWatcher) {
     this.commandLine = commandLine;
     this.agentLoader = agentLoader;
     this.profileRegistry = profileRegistry;
     this.agentScheduler = agentScheduler;
     this.providerPort = providerPort;
     this.toolRegistry = toolRegistry;
+    this.workspaceWatcher = workspaceWatcher;
   }
 
   public static void main(String[] args) {
@@ -103,6 +107,8 @@ public class OryxOsApplication implements CommandLineRunner {
       // 定时任务登记必须在 agents 扫描+校验之后——registerAll 读 ProfileRegistry,
       // 早于扫描跑会扫到空集(原 @PostConstruct 触发太早,28 节接入持久化后暴露)。
       agentScheduler.registerAll();
+      // 第 30 节:监听 agents/ 目录——此后手工丢目录/删目录实时生效(免重启),扫描注册与事件注册同一段代码
+      workspaceWatcher.start();
     }
     // 重命令路径一定有参数(chat/serve/gateway),直接派发
     commandLine.execute(args);

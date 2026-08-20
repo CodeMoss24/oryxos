@@ -109,9 +109,9 @@ class MockProviderFlowTest {
     List<String> roles = session.getMessages().stream().map(Message::role).toList();
     assertThat(roles).containsExactly("user", "assistant", "tool", "assistant");
 
-    // save_memory 真实写入 MEMORY.md 归档区
+    // save_memory 真实写入 MEMORY.md 归档区(第 30 节起 per-agent:agents/<name>/MEMORY.md)
     String memoryFile =
-        Files.readString(workspace.resolve("memory/MEMORY.md"), StandardCharsets.UTF_8);
+        Files.readString(workspace.resolve("agents/mock-agent/MEMORY.md"), StandardCharsets.UTF_8);
     assertThat(memoryFile).contains("## 归档记忆").contains("我住在上海");
 
     // 工具执行审计:一条 save_memory 成功

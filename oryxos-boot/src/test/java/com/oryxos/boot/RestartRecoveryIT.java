@@ -102,7 +102,8 @@ class RestartRecoveryIT {
     assertThat(runResult.get("status")).isEqualTo("triggered");
 
     // ── Phase 2: 核对四样持久化在进程外部 ──
-    String sessionId = "scheduler+scheduler+recovery-agent";
+    // 与 SessionManager.buildSessionId 的 ":" 分隔一致(28 节交付时误写 "+",出生即带病,本节显式跑 IT 暴露)
+    String sessionId = "scheduler:scheduler:recovery-agent";
 
     // ① 会话在 SQLite(GET /sessions/{id} 查得到完整历史)
     @SuppressWarnings("unchecked")
@@ -113,13 +114,18 @@ class RestartRecoveryIT {
     // 会话元数据也在 SQLite(sessions 表非空)
     assertThat(sessionRepository.findById(sessionId)).isPresent();
 
-    // ② 记忆在 MEMORY.md(文件持久,进程外)
-    String memory = Files.readString(WORKSPACE.resolve("memory/MEMORY.md"), StandardCharsets.UTF_8);
+    // ② 记忆在 MEMORY.md(文件持久,进程外;第 30 节起 per-agent:agents/<name>/MEMORY.md)
+    String memory =
+        Files.readString(
+            WORKSPACE.resolve("agents/recovery-agent/MEMORY.md"), StandardCharsets.UTF_8);
     assertThat(memory).isNotEmpty();
-    // API 读记忆端点也同步返回
+    // API 读记忆端点也同步返回(30 节:GET /agents/{name}/memory 取代全局 GET /api/v1/memory)
     @SuppressWarnings("unchecked")
     Map<String, Object> memoryApi =
-        (Map<String, Object>) rest.getForEntity("/api/v1/memory", Map.class).getBody().get("data");
+        (Map<String, Object>)
+            rest.getForEntity("/api/v1/agents/recovery-agent/memory", Map.class)
+                .getBody()
+                .get("data");
     assertThat((String) memoryApi.get("memory")).isNotEmpty();
 
     // ③ 定时任务状态与历史在 SQLite(scheduled_tasks / task_executions 两张表非空)
