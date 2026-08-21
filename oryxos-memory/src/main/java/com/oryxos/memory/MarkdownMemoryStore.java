@@ -5,7 +5,8 @@ import com.oryxos.core.memory.MemoryScope;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -32,6 +33,11 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
 
   private static final String CORE_HEADER = "## 核心记忆";
   private static final String ARCHIVAL_HEADER = "## 归档记忆";
+
+  /** 记忆条目时间戳:精确到分钟,管理台按此分辨一天内先后(yyyy-MM-dd HH:mm)。 */
+  private static final DateTimeFormatter TIMESTAMP =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
   private static final int MAX_ARCHIVE_CHARS = 4000; // 阈值只管归档区
 
   private final Path workspace;
@@ -60,7 +66,7 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
       ensureFile();
       String existing = Files.readString(memoryFile());
       String header = scope == MemoryScope.CORE ? CORE_HEADER : ARCHIVAL_HEADER;
-      String line = "\n- [" + LocalDate.now() + "] " + content;
+      String line = "\n- [" + TIMESTAMP.format(LocalDateTime.now()) + "] " + content;
       String updated = insertLine(existing, header, line);
       Files.writeString(memoryFile(), updated);
     } catch (IOException e) {

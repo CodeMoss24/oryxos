@@ -58,7 +58,7 @@ public class ReActLoop {
 
     String systemPrompt = promptBuilder.buildSystemPrompt(profile, agentMdBody);
     String memoryBlock = promptBuilder.buildMemoryBlock(session);
-    String toolListBlock = promptBuilder.buildToolListBlock(profile);
+    String toolListBlock = promptBuilder.buildToolListBlock();
     int maxIterations = profile.getSettings().getMaxIterations();
 
     for (int i = 0; i < maxIterations; i++) {
@@ -68,7 +68,8 @@ public class ReActLoop {
               memoryBlock,
               toolListBlock,
               promptBuilder.truncateHistory(session, profile.getSettings().getMaxHistoryTurns()));
-      List<OryxTool> tools = toolRegistry.subset(profile.getTools());
+      // 31 节:tools 不再内联声明——Agent 可用工具 = 全局 ToolRegistry 全部注册项
+      List<OryxTool> tools = toolRegistry.list();
       Prompt prompt = new Prompt(messages, tools);
       LlmResponse response = providerPort.chat(session.getSessionId(), profile, prompt);
 

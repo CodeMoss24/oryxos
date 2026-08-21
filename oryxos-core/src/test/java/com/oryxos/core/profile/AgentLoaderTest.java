@@ -5,9 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.oryxos.core.scheduler.ScheduleConfig;
-import com.oryxos.core.tool.OryxTool;
-import com.oryxos.core.tool.ToolRegistry;
-import com.oryxos.core.tool.ToolResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.DisplayName;
@@ -63,7 +60,7 @@ class AgentLoaderTest {
     assertThat(profile.getProvider().name()).isEqualTo("deepseek");
     assertThat(profile.getProvider().model()).isEqualTo("deepseek-chat");
     assertThat(profile.getProvider().temperature()).isEqualTo(0.7);
-    assertThat(profile.getTools()).containsExactly("http_get", "read_file");
+    // 31 节:tools 不再进 Profile(frontmatter 里写了也忽略——工具走全局列表)
     assertThat(profile.getSkills()).containsExactly("weather-skill");
     assertThat(profile.getMcpServers()).containsExactly("weather-mcp");
     assertThat(profile.getBootstrap()).containsExactly("AGENTS.md", "SOUL.md");
@@ -468,57 +465,6 @@ class AgentLoaderTest {
     assertThat(resources).containsEntry("scripts", false);
     assertThat(resources).containsEntry("skills", false);
     assertThat(resources).containsEntry("reference", false);
-  }
-
-  @Test
-  @DisplayName("tools 引用未注册能力 → warnUnregisteredTools 不抛异常(告警不阻断)")
-  void warnUnregisteredTools_doesNotThrowForUnregistered() {
-    var loader = new AgentLoader(agentsDir);
-    var registry = new ToolRegistry();
-    registry.register(stubTool("shell"));
-    Profile profile = new Profile();
-    profile.setName("recon");
-    profile.setTools(java.util.List.of("shell", "ghost-tool"));
-
-    assertThatNoException().isThrownBy(() -> loader.warnUnregisteredTools(profile, registry));
-  }
-
-  @Test
-  @DisplayName("tools 全部已注册 → warnUnregisteredTools 安静通过")
-  void warnUnregisteredTools_quietWhenAllRegistered() {
-    var loader = new AgentLoader(agentsDir);
-    var registry = new ToolRegistry();
-    registry.register(stubTool("shell"));
-    registry.register(stubTool("read_file"));
-    Profile profile = new Profile();
-    profile.setName("recon");
-    profile.setTools(java.util.List.of("shell", "read_file"));
-
-    assertThatNoException().isThrownBy(() -> loader.warnUnregisteredTools(profile, registry));
-  }
-
-  private OryxTool stubTool(String name) {
-    return new OryxTool() {
-      @Override
-      public String getName() {
-        return name;
-      }
-
-      @Override
-      public String getDescription() {
-        return "stub";
-      }
-
-      @Override
-      public String getInputSchema() {
-        return "{}";
-      }
-
-      @Override
-      public ToolResult execute(String inputJson) {
-        return new ToolResult(true, "", null, false);
-      }
-    };
   }
 
   private Path writeAgentMd(String name, String content) {

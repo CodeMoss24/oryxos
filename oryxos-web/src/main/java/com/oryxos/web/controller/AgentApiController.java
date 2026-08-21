@@ -3,9 +3,11 @@ package com.oryxos.web.controller;
 import com.oryxos.core.AgentService;
 import com.oryxos.core.agent.AgentExecutionService;
 import com.oryxos.core.agent.AgentLifecycleService;
+import com.oryxos.core.agent.AgentStore;
 import com.oryxos.core.memory.MemoryService;
 import com.oryxos.core.profile.Profile;
 import com.oryxos.core.profile.ProfileRegistry;
+import com.oryxos.core.session.Message;
 import com.oryxos.core.session.Session;
 import com.oryxos.core.session.SessionManager;
 import com.oryxos.core.skill.AgentSkillBindingService;
@@ -14,16 +16,18 @@ import com.oryxos.core.skill.SkillCatalog;
 import com.oryxos.core.skill.SkillCatalogEntry;
 import com.oryxos.web.controller.dto.AgentSkillBindingsView;
 import com.oryxos.web.controller.dto.ReplaceSkillBindingsRequest;
+import com.oryxos.web.dto.AgentChatView;
 import com.oryxos.web.dto.AgentView;
 import com.oryxos.web.dto.ApiResponse;
+import com.oryxos.web.dto.ChatMessageView;
 import com.oryxos.web.dto.CreateAgentRequest;
 import com.oryxos.web.dto.ExecutionView;
-import com.oryxos.web.dto.SessionView;
 import com.oryxos.web.dto.TriggerResponse;
 import com.oryxos.web.dto.UpdateAgentBasicRequest;
 import com.oryxos.web.dto.UpdateAgentRequest;
 import com.oryxos.web.exception.AgentTimeoutException;
 import com.oryxos.web.exception.ResourceNotFoundException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +63,9 @@ public class AgentApiController {
 
   /** Agent 调用超时上限(课件定值) */
   private static final long INVOKE_TIMEOUT_SECONDS = 60;
+
+  /** 会话聚合视图消息上限(与单会话历史端点的 100 条口径一致) */
+  private static final int MAX_CHAT_MESSAGES = 100;
 
   private final AgentService agentService;
   private final SessionManager sessionManager;
@@ -136,8 +143,27 @@ public class AgentApiController {
   /** 创建:脚手架完整 Agent 目录 + 派生注册,失败回滚(不留半个 Agent);name 冲突/非法 → 400。 */
   @PostMapping
   public ApiResponse<AgentView> create(@RequestBody CreateAgentRequest request) {
-    Profile profile = lifecycle.create(request.name(), request.description());
+    CreateAgentRequest.ScheduleDraft draft = request.schedule();
+    AgentStore.ScheduleDraft schedule =
+        draft == null
+            ? null
+            : new AgentStore.ScheduleDraft(draft.cron(), draft.zone(), draft.message());
+    Profile profile = lifecycle.create(request.name(), request.description(), schedule);
+    bindRequestedSkills(request.name(), request.skillBindings());
     return ApiResponse.ok(view(profile));
+  }
+
+  /** 创建后补建前端勾选的 Skill 绑定(单个失败抛 400 前已创建的绑定不回收,列表可重新绑定;幂等跳过已存在的)。 */
+  private void bindRequestedSkills(String agent, List<String> skills) {
+    if (skills == null || skills.isEmpty()) {
+      return;
+    }
+    for (String skill : skills) {
+      if (skill == null || skill.isBlank()) {
+        continue;
+      }
+      skillBindings.bind(agent, skill.trim());
+    }
   }
 
   /** 列表。 */
@@ -183,12 +209,22 @@ public class AgentApiController {
     return ApiResponse.ok(files);
   }
 
-  /** 保存一组文件并生效:先校验 AGENT.md 可解析(非法 400 不写坏目录)→ 写入 → 重注册,返回新视图。 */
+  /**
+   * 保存一组文件并生效:先校验 AGENT.md 可解析(非法 400 不写坏目录)→ 写入 → 重注册,返回新视图; skillBindings(可选)为前端勾选的 Skill
+   * 绑定,保存后逐个建立固定软连接。
+   */
+  @SuppressWarnings("unchecked")
   @PostMapping("/{name}/files")
   public ApiResponse<AgentView> saveFiles(
-      @PathVariable String name, @RequestBody Map<String, Map<String, String>> body) {
-    Map<String, String> files = body.getOrDefault("files", Map.of());
+      @PathVariable String name, @RequestBody Map<String, Object> body) {
+    Object filesRaw = body.getOrDefault("files", Map.of());
+    Map<String, String> files = filesRaw instanceof Map ? (Map<String, String>) filesRaw : Map.of();
     Profile profile = lifecycle.saveFiles(name, files);
+    Object bindingsRaw = body.get("skillBindings");
+    if (bindingsRaw instanceof List<?> list) {
+      bindRequestedSkills(
+          name, (List<String>) list.stream().filter(String.class::isInstance).toList());
+    }
     return ApiResponse.ok(view(profile));
   }
 
@@ -201,14 +237,41 @@ public class AgentApiController {
     return ApiResponse.ok(Map.of("memory", memoryService.readAll(name)));
   }
 
-  /** 这个 Agent 的固定管理台会话(channel=admin, user=console, getOrCreate 幂等);不存在 → 404。 */
+  /**
+   * 这个 Agent 的会话聚合视图:固定管理台会话(admin:console, getOrCreate 幂等)优先, 再按 lastActiveAt 倒序并入该 Agent
+   * 最近其他会话(invoke 手动 / scheduler 定时)的消息——整块拼接不切碎一轮, 总消息 ≤100 条。不存在 → 404。
+   */
   @GetMapping("/{name}/session")
-  public ApiResponse<SessionView> getSession(@PathVariable String name) {
+  public ApiResponse<AgentChatView> getSession(@PathVariable String name) {
     if (profileRegistry.find(name).isEmpty()) {
       throw new ResourceNotFoundException("agent not found: " + name);
     }
-    Session session = sessionManager.getOrCreate("admin", "console", name);
-    return ApiResponse.ok(SessionView.from(session));
+    Session fixed = sessionManager.getOrCreate("admin", "console", name);
+    List<ChatMessageView> merged = new ArrayList<>();
+    List<String> sources = new ArrayList<>();
+    appendSession(merged, sources, fixed, fixed.getSessionId(), MAX_CHAT_MESSAGES);
+    // 固定会话之外的同 Agent 会话:按活跃倒序(listAll 已排序), 逐个整块并入直到上限
+    for (Session s : sessionManager.listRecent(100)) {
+      if (merged.size() >= MAX_CHAT_MESSAGES) break;
+      if (!name.equals(s.getProfileName()) || fixed.getSessionId().equals(s.getSessionId()))
+        continue;
+      appendSession(merged, sources, s, s.getSessionId(), MAX_CHAT_MESSAGES - merged.size());
+    }
+    return ApiResponse.ok(
+        new AgentChatView(fixed.getSessionId(), fixed.getProfileName(), merged, sources));
+  }
+
+  /** 把某个会话的消息整块追加进聚合列表(不切碎 tool 往返);sessions 记录非空的消息来源。 */
+  private static void appendSession(
+      List<ChatMessageView> out, List<String> sources, Session s, String source, int limit) {
+    if (limit <= 0 || s.getMessages().isEmpty()) {
+      return;
+    }
+    sources.add(source);
+    for (Message m : s.getMessages()) {
+      if (out.size() >= limit) break;
+      out.add(ChatMessageView.from(m, source));
+    }
   }
 
   /** 往固定会话发消息、触发 ReAct(同 invoke 入口,但落在固定会话里累积上下文);不存在 → 404。 */

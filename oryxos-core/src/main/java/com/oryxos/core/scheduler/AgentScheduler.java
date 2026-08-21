@@ -236,6 +236,21 @@ public class AgentScheduler {
     }
   }
 
+  /**
+   * 删除一个定时任务(管理台"删除任务"、Agent 删除的级联清库共用):取消调度句柄 → 清 taskRefs/scheduledTaskIds 索引 → 删 scheduled_tasks
+   * + task_executions 记录。幽灵任务(Agent 已归档但库记录残留)没有句柄,幂等跳过内存清理只删库。
+   */
+  public void deleteTask(String taskId) {
+    ScheduledFuture<?> future = scheduledTasks.remove(taskId);
+    if (future != null) {
+      future.cancel(false); // 不中断正在跑的那次触发,只取消后续触发
+    }
+    taskRefs.remove(taskId);
+    scheduledTaskIds.remove(taskId);
+    store.delete(taskId);
+    log.info("Deleted schedule {} (cancelled={})", taskId, future != null);
+  }
+
   /** 按 cron 表达式算下次触发时刻。 */
   private static Instant computeNext(ScheduleConfig sc) {
     try {

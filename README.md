@@ -174,10 +174,8 @@ description: 每天早上查天气并推送穿搭建议
 provider:
   name: deepseek
   model: deepseek-chat
-tools: [http_get, notify]
-notify_channels:
-  - type: webhook
-    url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx
+# 31 节起 frontmatter 不再内联 tools / notify_channels:
+# 工具走全局 ToolRegistry,notify 出口走管理台「通知渠道」全局注册表
 schedules:
   - cron: "0 0 8 * * ?"
     zone: Asia/Shanghai

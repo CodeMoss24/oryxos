@@ -8,6 +8,9 @@ import java.util.Map;
 /**
  * Profile 是底座内部的运行时宿主配置对象,决定一个 Agent "怎么跑"。 由 AgentLoader.deriveProfile() 从 AGENT.md 的 frontmatter
  * 派生,不是手写的 YAML。
+ *
+ * <p>31 节起 tools / notify_channels 不再内联:Agent 可用工具 = 全局 {@code ToolRegistry} 的全部注册工具; 通知出口 = 全局
+ * {@code NotifyChannelRegistry}(管理台 CRUD,Agent 按名引用)。
  */
 public class Profile {
 
@@ -15,11 +18,9 @@ public class Profile {
   private String description;
   private Identity identity;
   private Provider provider;
-  private List<String> tools = new ArrayList<>();
   private List<String> skills = new ArrayList<>();
   private List<String> mcpServers = new ArrayList<>();
   private List<ChannelBinding> channels = new ArrayList<>();
-  private List<NotifyChannel> notifyChannels = new ArrayList<>();
   private List<ScheduleConfig> schedules = new ArrayList<>();
   private List<String> bootstrap = new ArrayList<>();
   private Settings settings = new Settings();
@@ -29,8 +30,6 @@ public class Profile {
   public record Provider(String name, String model, Double temperature) {}
 
   public record ChannelBinding(String name, Map<String, Object> config) {}
-
-  public record NotifyChannel(String type, Map<String, String> config) {}
 
   public static class Settings {
     private int maxIterations = 10;
@@ -85,14 +84,6 @@ public class Profile {
     this.provider = provider;
   }
 
-  public List<String> getTools() {
-    return tools;
-  }
-
-  public void setTools(List<String> tools) {
-    this.tools = tools;
-  }
-
   public List<String> getSkills() {
     return skills;
   }
@@ -115,14 +106,6 @@ public class Profile {
 
   public void setChannels(List<ChannelBinding> channels) {
     this.channels = channels;
-  }
-
-  public List<NotifyChannel> getNotifyChannels() {
-    return notifyChannels;
-  }
-
-  public void setNotifyChannels(List<NotifyChannel> notifyChannels) {
-    this.notifyChannels = notifyChannels;
   }
 
   public List<ScheduleConfig> getSchedules() {

@@ -87,7 +87,6 @@ class MockProviderFlowTest {
     Profile mockProfile = new Profile();
     mockProfile.setName("mock-agent");
     mockProfile.setProvider(new Profile.Provider("mock", "mock", null));
-    mockProfile.setTools(List.of("save_memory", "recall_memory"));
     profileRegistry.register(mockProfile);
 
     SessionPersistencePort sessionPort = Mockito.mock(SessionPersistencePort.class);

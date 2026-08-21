@@ -3,6 +3,8 @@ package com.oryxos.boot;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.oryxos.core.notify.NotifyChannelDef;
+import com.oryxos.core.notify.NotifyChannelRegistry;
 import com.oryxos.core.profile.AgentLoader;
 import com.oryxos.core.profile.ProfileRegistry;
 import com.oryxos.storage.entity.LlmCallEntity;
@@ -52,7 +54,10 @@ class SchedulerFlowIT {
   private static final List<String> receivedMessages = new ArrayList<>();
   private static int webhookPort;
 
-  /** Agent 定义:定时每 2 分钟触发,查天气+推送,notify 指向 IT 内 webhook 接收端。 */
+  /**
+   * Agent 定义:定时每 2 分钟触发,查天气+推送。31 节起 tools / notify_channels 不再内联——工具走全局列表, 通知出口由
+   * NotifyChannelRegistry 预置(见 {@link #seedNotifyChannel} 指向 IT 内 webhook 接收端)。
+   */
   private static final String AGENT_MD_TEMPLATE =
       """
       ---
@@ -64,17 +69,11 @@ class SchedulerFlowIT {
       provider:
         name: deepseek
         model: deepseek-chat
-      tools:
-        - http_get
-        - notify
       schedules:
         - id: flow-schedule
           cron: "0 0 3 * * *"
           zone: Asia/Shanghai
           message: 到点了，查一下北京天气(http://wttr.in/Beijing?format=3)，把结果用 notify 推送出去
-      notify_channels:
-        - type: webhook
-          url: WEBHOOK_URL_PLACEHOLDER
       ---
       你是定时天气助手。触发时严格按提示词步骤执行:先用 http_get 查天气,再用 notify 推送。
       """;
@@ -91,6 +90,7 @@ class SchedulerFlowIT {
   @Autowired private ProfileRegistry profileRegistry;
   @Autowired private LlmCallRepository llmCallRepository;
   @Autowired private ToolInvocationRepository toolInvocationRepository;
+  @Autowired private NotifyChannelRegistry notifyChannelRegistry;
 
   @BeforeAll
   static void startWebhookReceiverAndWriteAgent() throws IOException {
@@ -109,10 +109,10 @@ class SchedulerFlowIT {
     // 顺序关键:必须先启动接收端拿到端口,再写 AGENT.md——28 节交付时在静态初始化里拼 URL,
     // 彼时 webhookPort 还是默认 0,notify 推往 http://localhost:0 必然连接失败,
     // NotifyTools catch 后静默返回 failure,断言只见 success=false(出生即带病,IT 显式跑才暴露)
-    String url = "http://localhost:" + webhookPort;
-    String agentMd = AGENT_MD_TEMPLATE.replace("WEBHOOK_URL_PLACEHOLDER", url);
     Files.writeString(
-        WORKSPACE.resolve("agents/scheduler-flow/AGENT.md"), agentMd, StandardCharsets.UTF_8);
+        WORKSPACE.resolve("agents/scheduler-flow/AGENT.md"),
+        AGENT_MD_TEMPLATE,
+        StandardCharsets.UTF_8);
   }
 
   @AfterAll
@@ -128,6 +128,9 @@ class SchedulerFlowIT {
   @BeforeEach
   void scanAgents() {
     receivedMessages.clear();
+    // 31 节:notify 出口走全局注册表——IT 把 webhook 接收端注册成命名渠道,Agent 的 notify 工具按名(或默认第一个)推到这里
+    notifyChannelRegistry.save(
+        new NotifyChannelDef("it-webhook", "webhook", "http://localhost:" + webhookPort, "IT 接收端"));
     agentLoader.scanAndRegister(profileRegistry);
   }
 
@@ -171,11 +174,12 @@ class SchedulerFlowIT {
               assertThat(r.getSuccess()).isTrue();
             });
 
-    // ⑤ webhook 真收到消息体(notify 推送内容含天气数据)
-    assertThat(receivedMessages).isNotEmpty();
-    // 飞书格式:{"msg_type":"text","content":{"text":"..."}}
+    // ⑤ webhook 真收到消息体:两条推送都是通用格式 {"content":"..."}(ba79a1b 起,不再用飞书 msg_type 格式)
     assertThat(receivedMessages)
-        .anySatisfy(msg -> assertThat(msg).contains("\"msg_type\":\"text\""));
+        .hasSize(2)
+        .allSatisfy(msg -> assertThat(msg).contains("\"content\":"));
+    // 推送内容确实带了天气数据(模型自然语言总结,措辞不固定,断言稳定特征温度 °C)
+    assertThat(receivedMessages).anySatisfy(msg -> assertThat(msg).contains("°C"));
   }
 
   @Test

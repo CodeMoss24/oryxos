@@ -5,19 +5,17 @@ import java.util.List;
 
 /**
  * Agent 列表/详情视图(web 层 DTO)。core 返回 Profile 实体,web 层负责裁剪成对外形态—— core 不依赖 web,方向不能反。 provider/model
- * 平铺为 String(对齐参考版管理台前端字段)。
+ * 平铺为 String(对齐参考版管理台前端字段)。31 节起 tools 走全局列表,Agent 视图不再携带 per-Agent 工具声明。
  */
 public record AgentView(
     String name,
     String description,
     String provider,
     String model,
-    List<String> tools,
     List<String> skills,
     List<ScheduleInfo> schedules) {
 
   public AgentView {
-    tools = tools == null ? List.of() : List.copyOf(tools);
     skills = skills == null ? List.of() : List.copyOf(skills);
     schedules = schedules == null ? List.of() : List.copyOf(schedules);
   }
@@ -36,7 +34,6 @@ public record AgentView(
         profile.getDescription(),
         provider == null ? null : provider.name(),
         provider == null ? null : provider.model(),
-        profile.getTools(),
         liveSkills,
         profile.getSchedules() == null
             ? List.of()

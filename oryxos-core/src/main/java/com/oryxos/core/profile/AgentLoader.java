@@ -2,7 +2,6 @@ package com.oryxos.core.profile;
 
 import com.oryxos.core.runtime.OryxOsRuntime;
 import com.oryxos.core.scheduler.ScheduleConfig;
-import com.oryxos.core.tool.ToolRegistry;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -11,8 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
 
@@ -28,12 +25,13 @@ import org.yaml.snakeyaml.Yaml;
  * </ul>
  *
  * <p>第 29 节:补缺必填项校验(provider.name/name 缺则抛 IllegalArgumentException 点名 Agent+字段,单 Agent 失败不阻断
- * 其余)、资源路径识别(scripts/skills/REFERENCE.md,不进 Profile,仅供观测)、tools 未注册能力告警(非阻断)。
+ * 其余)、资源路径识别(scripts/skills/REFERENCE.md,不进 Profile,仅供观测)。
+ *
+ * <p>第 31 节:frontmatter 不再解析 tools / notify_channels —— 工具走全局 ToolRegistry 全部注册项, 通知出口走全局
+ * NotifyChannelRegistry(管理台 CRUD),这两键在 AGENT.md 里写没写都不影响运行。
  */
 @Component
 public class AgentLoader {
-
-  private static final Logger log = LoggerFactory.getLogger(AgentLoader.class);
 
   private final Path agentsDir;
 
@@ -110,32 +108,14 @@ public class AgentLoader {
           new Profile.Provider(providerName, (String) provider.get("model"), temperature));
     }
 
-    List<String> tools = toStringList(front.get("tools"));
-    if (tools != null) profile.setTools(tools);
+    // 第 31 节:tools / notify_channels 不再内联(全局 ToolRegistry / NotifyChannelRegistry 是唯一真相源),
+    // 写没写这两个键都不再进 Profile。
     List<String> skills = toStringList(front.get("skills"));
     if (skills != null) profile.setSkills(skills);
     List<String> mcpServers = toStringList(front.get("mcp_servers"));
     if (mcpServers != null) profile.setMcpServers(mcpServers);
     List<String> bootstrap = toStringList(front.get("bootstrap"));
     if (bootstrap != null) profile.setBootstrap(bootstrap);
-
-    // notify_channels: [{type, url}, ...]
-    List<Map<String, String>> rawChannels =
-        (List<Map<String, String>>) front.get("notify_channels");
-    if (rawChannels != null) {
-      List<Profile.NotifyChannel> channels = new ArrayList<>();
-      for (Map<String, String> ch : rawChannels) {
-        String type = ch.get("type");
-        Map<String, String> config = new java.util.LinkedHashMap<>();
-        for (var entry : ch.entrySet()) {
-          if (!"type".equals(entry.getKey())) {
-            config.put(entry.getKey(), resolveEnv(entry.getValue()));
-          }
-        }
-        channels.add(new Profile.NotifyChannel(type, config));
-      }
-      profile.setNotifyChannels(channels);
-    }
 
     // schedules: [{id, cron, zone, message}, ...]——缺 id 的条目没有锁键可用,
     // 属配置错误,跳过该条并记日志,不阻断启动(与 notify_channels 同样的失败策略)
@@ -156,17 +136,6 @@ public class AgentLoader {
     return profile;
   }
 
-  /** Resolve ${ENV_VAR} placeholders in config values. */
-  private static String resolveEnv(String value) {
-    if (value == null) return null;
-    if (value.startsWith("${") && value.endsWith("}")) {
-      String envKey = value.substring(2, value.length() - 1);
-      String resolved = System.getenv(envKey);
-      return resolved != null ? resolved : value;
-    }
-    return value;
-  }
-
   /**
    * 第 29 节:识别一个 Agent 目录里的可选资源(scripts/ skills/ REFERENCE.md)是否存在。
    *
@@ -181,25 +150,6 @@ public class AgentLoader {
     resources.put("skills", Files.isDirectory(agentDir.resolve("skills")));
     resources.put("reference", Files.exists(agentDir.resolve("REFERENCE.md")));
     return resources;
-  }
-
-  /**
-   * 第 29 节:tools 里引用底座未注册的能力 → 告警(不阻断)。 ToolRegistry 在 core,直接 find 查,无跨模块依赖。 装配层扫描循环对每个 Profile
-   * 调一次。方法参数注入 ToolRegistry,构造期不硬依赖。
-   */
-  public void warnUnregisteredTools(Profile profile, ToolRegistry toolRegistry) {
-    List<String> tools = profile.getTools();
-    if (tools == null || tools.isEmpty()) {
-      return;
-    }
-    for (String toolName : tools) {
-      if (toolRegistry.find(toolName).isEmpty()) {
-        log.warn(
-            "Agent '{}' references unregistered tool '{}' — load continues but this tool will be unavailable at runtime",
-            profile.getName(),
-            toolName);
-      }
-    }
   }
 
   /** 解析 AGENT.md:分离 frontmatter(YAML)和正文(Markdown)。 */

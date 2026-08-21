@@ -10,4 +10,7 @@ import org.springframework.stereotype.Repository;
 public interface TaskExecutionRepository extends JpaRepository<TaskExecutionEntity, Long> {
 
   List<TaskExecutionEntity> findByTaskIdOrderByStartedAtDesc(String taskId);
+
+  /** 删除某任务的全部执行历史(任务删除时级联清理,避免孤儿记录)。 */
+  void deleteByTaskId(String taskId);
 }

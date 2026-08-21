@@ -33,9 +33,8 @@ schedules:        # 可选,定时自动触发
     cron: <cron 表达式,如 0 9 * * *>
     zone: <时区,如 Asia/Shanghai>
     message: <到点时触发 Agent 的话,写清楚要做什么>
-notify_channels:  # 可选,出站通知目标
-  - type: webhook
-    url: <webhook 地址,敏感值用 ${ENV_VAR} 占位>
+# 31 节起 AGENT.md 不写 tools / notify_channels:
+# 工具走全局 ToolRegistry(全量可用),notify 出口走管理台「通知渠道」全局注册表
 ---
 
 <正文:给这个 Agent 的任务指令,清晰、可执行,说明目标、步骤与产出格式>
@@ -46,6 +45,6 @@ notify_channels:  # 可选,出站通知目标
 1. 只输出这份 `AGENT.md` 的完整内容(frontmatter + 正文),不要额外解释。
 2. `name` 必须与用户描述的主题一致,小写英文连字符,如 `daily-weather`。
 3. `schedules` 的 cron 必须仔细换算用户描述的时间(注意时区),宁可保守也不要乱猜。
-4. `tools` 只给这个任务真正需要的工具,给多权限是危险的。
-5. 用户没提到的配置项(如 schedules、notify_channels)不要臆造,留空。
+4. 不写 `tools` / `notify_channels`(31 节起全局注册表管理,frontmatter 不再声明)。
+5. 用户没提到的配置项(如 schedules)不要臆造,留空。
 6. 正文用中文写,包含:职责、执行步骤、产出格式、失败时的兜底行为。

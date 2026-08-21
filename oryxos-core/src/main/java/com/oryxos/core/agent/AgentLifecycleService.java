@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -73,13 +74,18 @@ public class AgentLifecycleService {
 
   /** 创建 Agent:脚手架完整目录(name + description)→ 派生注册。 失败回滚已写目录;name 冲突第一步就拒,一个目录都不写。 */
   public Profile create(String name, String description) {
+    return create(name, description, null);
+  }
+
+  /** schedule:创建时即写入 AGENT.md 的定时配置,见 {@link AgentStore.ScheduleDraft}。 */
+  public Profile create(String name, String description, AgentStore.ScheduleDraft schedule) {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("Agent name must not be blank");
     }
     if (profileRegistry.exists(name)) {
       throw new IllegalArgumentException("Agent 已存在: " + name);
     }
-    Path agentDir = agentStore.scaffold(name, description);
+    Path agentDir = agentStore.scaffold(name, description, schedule);
     try {
       return register(agentDir);
     } catch (RuntimeException e) {
@@ -135,9 +141,19 @@ public class AgentLifecycleService {
     return fresh;
   }
 
-  /** 删除 Agent:先注销定时 → 移出索引 → 整个目录归档到 .oryxos/archive/(不物理删,定义可追溯)。 未注册过的名字跳过注销,只归档。 */
+  /**
+   * 删除 Agent:先注销定时(内存句柄 + scheduled_tasks/task_executions 库记录级联清)→ 移出索引 → 整个目录归档到
+   * .oryxos/archive/(不物理删,定义可追溯)。 未注册过的名字跳过注销,只归档。
+   */
   public void delete(String name) {
-    profileRegistry.find(name).ifPresent(agentScheduler::unregisterProfile);
+    profileRegistry
+        .find(name)
+        .ifPresent(
+            p -> {
+              for (ScheduleConfig sc : p.getSchedules()) {
+                agentScheduler.deleteTask(sc.id()); // 句柄取消 + 三个索引清理 + 库记录删除,一步到位
+              }
+            });
     profileRegistry.remove(name);
     agentStore.archive(name);
   }
@@ -215,11 +231,93 @@ public class AgentLifecycleService {
       pm.put("model", model.strip());
       fm.put("provider", pm);
     }
+    return update(name, dumpFrontmatter(fm, parsed.body()));
+  }
+
+  /**
+   * 给已存在的 Agent 添加一个定时任务(管理台"添加定时任务"):校验 cron 合法 → 读 AGENT.md → frontmatter 追加 schedules 条目(id 生成
+   * <name>-schedule,同 Agent 已有时拒绝)→ 走 update(先校验后落盘,注销旧句柄注册新句柄)。Agent 不存在 → 404。
+   */
+  public Profile addSchedule(String name, AgentStore.ScheduleDraft draft) {
+    if (draft == null || draft.cron() == null || draft.cron().isBlank()) {
+      throw new IllegalArgumentException("cron 不能为空");
+    }
+    if (profileRegistry.find(name).isEmpty()) {
+      throw new IllegalArgumentException("Agent 不存在: " + name);
+    }
+    try {
+      CronExpression.parse(draft.cron().trim()); // 先验 cron,非法 400 不写进 AGENT.md
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("非法 cron 表达式: " + draft.cron(), e);
+    }
+    ParsedAgentMd parsed = agentLoader.parseAgentMd(agentStore.read(name));
+    Map<String, Object> fm = new LinkedHashMap<>(parsed.frontmatter());
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> schedules =
+        fm.get("schedules") instanceof List
+            ? new ArrayList<>((List<Map<String, Object>>) fm.get("schedules"))
+            : new ArrayList<>();
+    String id = name + "-schedule";
+    boolean dup = schedules.stream().anyMatch(s -> id.equals(s.get("id")));
+    if (dup) {
+      throw new IllegalArgumentException("Agent " + name + " 已有一个定时任务(" + id + "),先删除再添加");
+    }
+    Map<String, Object> entry = new LinkedHashMap<>();
+    entry.put("id", id);
+    entry.put("cron", draft.cron().trim());
+    entry.put(
+        "zone",
+        draft.zone() == null || draft.zone().isBlank() ? "Asia/Shanghai" : draft.zone().trim());
+    entry.put(
+        "message",
+        draft.message() == null || draft.message().isBlank()
+            ? "到点了,执行今天的任务。"
+            : draft.message().trim());
+    schedules.add(entry);
+    fm.put("schedules", schedules);
+    return update(name, dumpFrontmatter(fm, parsed.body()));
+  }
+
+  /**
+   * 删除一个定时任务:找所属 Agent → 从 AGENT.md 的 schedules 移除该条目(空则删 key)→ 走 update 重注册剩余任务 → deleteTask
+   * 清句柄+库。Agent 已归档(幽灵任务,定义源不在)时直接清库。
+   */
+  public void removeSchedule(String taskId) {
+    Optional<Profile> owner =
+        profileRegistry.list().stream()
+            .filter(p -> p.getSchedules().stream().anyMatch(sc -> sc.id().equals(taskId)))
+            .findFirst();
+    if (owner.isEmpty()) {
+      // 幽灵任务:定义源(Agent)已不存在,直接清库;deleteTask 对无句柄的 id 幂等
+      agentScheduler.deleteTask(taskId);
+      return;
+    }
+    String name = owner.get().getName();
+    ParsedAgentMd parsed = agentLoader.parseAgentMd(agentStore.read(name));
+    Map<String, Object> fm = new LinkedHashMap<>(parsed.frontmatter());
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> schedules =
+        fm.get("schedules") instanceof List
+            ? new ArrayList<>((List<Map<String, Object>>) fm.get("schedules"))
+            : new ArrayList<>();
+    boolean removed = schedules.removeIf(s -> taskId.equals(s.get("id")));
+    if (!removed) {
+      throw new IllegalArgumentException("定时任务不存在: " + taskId);
+    }
+    if (schedules.isEmpty()) {
+      fm.remove("schedules");
+    } else {
+      fm.put("schedules", schedules);
+    }
+    update(name, dumpFrontmatter(fm, parsed.body()));
+    agentScheduler.deleteTask(taskId); // 注销句柄 + 删库记录(update 的 registerProfile 只 upsert 剩余任务)
+  }
+
+  /** frontmatter Map + 正文 → 完整 AGENT.md 文本(updateBasicInfo / addSchedule / removeSchedule 共用)。 */
+  private static String dumpFrontmatter(Map<String, Object> fm, String body) {
     DumperOptions opts = new DumperOptions();
     opts.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-    String newMarkdown =
-        "---\n" + new Yaml(opts).dump(fm) + "---\n\n" + parsed.body().strip() + "\n";
-    return update(name, newMarkdown);
+    return "---\n" + new Yaml(opts).dump(fm) + "---\n\n" + body.strip() + "\n";
   }
 
   @SuppressWarnings("unchecked")
@@ -287,24 +385,11 @@ public class AgentLifecycleService {
           + "identity:\n"
           + "  agent_name: <对话中自称的名字>\n"
           + "  prompt: <人格设定,一句话>\n"
-          + "tools:            # 可选,内置 Tool 白名单,未列出的不可用\n"
-          + "  - read_file\n"
-          + "  - write_file\n"
-          + "  - list_dir\n"
-          + "  - shell\n"
-          + "  - http_get\n"
-          + "  - http_post\n"
-          + "  - save_memory\n"
-          + "  - recall_memory\n"
-          + "  - notify\n"
           + "schedules:        # 可选,定时自动触发\n"
           + "  - id: <唯一任务 id,如 daily-weather>\n"
           + "    cron: <cron 表达式,如 0 9 * * *>\n"
           + "    zone: <时区,如 Asia/Shanghai>\n"
           + "    message: <到点时触发 Agent 的话,写清楚要做什么>\n"
-          + "notify_channels:  # 可选,出站通知目标\n"
-          + "  - type: webhook\n"
-          + "    url: <webhook 地址,敏感值用 ${ENV_VAR} 占位>\n"
           + "---\n"
           + "\n"
           + "<正文:给这个 Agent 的任务指令,清晰、可执行,说明目标、步骤与产出格式>\n"
@@ -315,7 +400,7 @@ public class AgentLifecycleService {
           + "1. 只输出这份 `AGENT.md` 的完整内容(frontmatter + 正文),不要额外解释。\n"
           + "2. `name` 必须与用户描述的主题一致,小写英文连字符,如 `daily-weather`。\n"
           + "3. `schedules` 的 cron 必须仔细换算用户描述的时间(注意时区),宁可保守也不要乱猜。\n"
-          + "4. `tools` 只给这个任务真正需要的工具,给多权限是危险的。\n"
-          + "5. 用户没提到的配置项(如 schedules、notify_channels)不要臆造,留空。\n"
+          + "4. 不要在 frontmatter 里写 `tools` 或 `notify_channels`——工具全局可用(内置 + MCP 全量),通知渠道在管理台「Notify 渠道」里统一配置,Agent 正文里说明用 notify 工具推送即可。\n"
+          + "5. 用户没提到的配置项(如 schedules、identity)不要臆造,留空。\n"
           + "6. 正文用中文写,包含:职责、执行步骤、产出格式、失败时的兜底行为。";
 }

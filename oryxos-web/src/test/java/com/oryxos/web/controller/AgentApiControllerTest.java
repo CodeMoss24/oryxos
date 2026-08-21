@@ -73,7 +73,6 @@ class AgentApiControllerTest {
     profile.setName(name);
     profile.setDescription(name + " 的任务");
     profile.setProvider(new Profile.Provider("deepseek", "deepseek-chat", null));
-    profile.setTools(List.of("http_get", "notify"));
     profile.setSchedules(
         List.of(new ScheduleConfig(name + "-morning", "0 0 9 * * *", "Asia/Shanghai", "到点了")));
     return profile;
@@ -82,7 +81,7 @@ class AgentApiControllerTest {
   @Test
   @DisplayName("create_成功返回 AgentView(统一 ApiResponse 信封)")
   void create_returnsAgentView() throws Exception {
-    when(lifecycle.create("weather-daily", "每日天气")).thenReturn(profileNamed("weather-daily"));
+    when(lifecycle.create("weather-daily", "每日天气", null)).thenReturn(profileNamed("weather-daily"));
 
     mockMvc
         .perform(
@@ -99,7 +98,9 @@ class AgentApiControllerTest {
   @Test
   @DisplayName("create_name冲突_400 统一 ApiResponse、可读原因")
   void create_nameConflict_returns400() throws Exception {
-    doThrow(new IllegalArgumentException("Agent 已存在: dupe")).when(lifecycle).create("dupe", "x");
+    doThrow(new IllegalArgumentException("Agent 已存在: dupe"))
+        .when(lifecycle)
+        .create("dupe", "x", null);
 
     mockMvc
         .perform(

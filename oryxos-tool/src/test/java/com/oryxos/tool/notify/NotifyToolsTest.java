@@ -12,8 +12,6 @@ import static org.mockito.Mockito.when;
 
 import com.oryxos.core.notify.NotifyChannelDef;
 import com.oryxos.core.notify.NotifyChannelRegistry;
-import com.oryxos.core.profile.Profile;
-import com.oryxos.core.profile.ProfileContext;
 import com.oryxos.core.tool.ToolResult;
 import com.oryxos.tool.sandbox.FileSandboxProperties;
 import com.oryxos.tool.sandbox.HttpSandboxProperties;
@@ -27,12 +25,11 @@ import java.util.Map;
 import java.util.Optional;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("NotifyTools — 通知内置 Tool 验收")
+@DisplayName("NotifyTools — 通知内置 Tool 验收(31 节:只走全局渠道注册表)")
 class NotifyToolsTest {
 
   private Sandbox sandbox;
@@ -49,33 +46,17 @@ class NotifyToolsTest {
     notifyTools = new NotifyTools(Map.of("webhook", adapter), registry);
   }
 
-  @AfterEach
-  void tearDown() {
-    ProfileContext.clear();
-  }
-
-  private static Profile profileWithChannels(Profile.NotifyChannel... channels) {
-    Profile profile = new Profile();
-    profile.setName("test");
-    profile.setNotifyChannels(List.of(channels));
-    return profile;
-  }
-
   @Test
-  @DisplayName("notify_channels 未配置且注册表无渠道时返回明确错误,非静默失败")
-  void reportsErrorWhenNoNotifyChannelsConfigured() {
-    Profile profile = new Profile();
-    profile.setName("test");
-    ProfileContext.set(profile);
-
+  @DisplayName("注册表为空且 channel 缺省时返回明确错误,非静默失败")
+  void reportsErrorWhenRegistryEmpty() {
     ToolResult result = notifyTools.execute("{\"content\":\"hi\"}");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.errorMessage()).contains("未配置 notify_channels");
+    assertThat(result.errorMessage()).contains("注册表为空");
   }
 
   @Test
-  @DisplayName("channel 传注册表渠道名:按名解析 {type,url} 交给对应适配器(新模型)")
+  @DisplayName("channel 传注册表渠道名:按名解析 {type,url} 交给对应适配器")
   void resolvesRegisteredChannelByName() {
     when(registry.find("ops-alerts"))
         .thenReturn(
@@ -97,33 +78,25 @@ class NotifyToolsTest {
   }
 
   @Test
-  @DisplayName("channel 传注册表没有的名字:回退按 type 匹配 Profile 内联渠道(兼容老模型)")
-  void fallsBackToInlineWhenChannelNotInRegistry() {
-    when(registry.find("webhook")).thenReturn(Optional.empty());
-    Profile.NotifyChannel ch =
-        new Profile.NotifyChannel("webhook", Map.of("url", "https://example.com/webhook"));
-    ProfileContext.set(profileWithChannels(ch));
+  @DisplayName("channel 传注册表没有的名字时明确报错,不回退默认(避免消息发错地方)")
+  void reportsErrorWhenChannelNotInRegistry() {
+    when(registry.find("feishu")).thenReturn(Optional.empty());
 
-    ToolResult result = notifyTools.execute("{\"content\":\"hi\",\"channel\":\"webhook\"}");
+    ToolResult result = notifyTools.execute("{\"content\":\"hi\",\"channel\":\"feishu\"}");
 
-    assertThat(result.success()).isTrue();
-    verify(adapter)
-        .send(
-            argThat(
-                t ->
-                    t.channelType().equals("webhook")
-                        && t.config().get("url").equals("https://example.com/webhook")),
-            eq("hi"));
+    assertThat(result.success()).isFalse();
+    assertThat(result.errorMessage()).contains("feishu").contains("不存在");
+    verify(adapter, never()).send(any(), any());
   }
 
   @Test
-  @DisplayName("channel 参数缺省时取第一个内联渠道")
+  @DisplayName("channel 参数缺省时取注册表第一个渠道")
   void usesFirstChannelWhenChannelParamOmitted() {
-    Profile.NotifyChannel chA =
-        new Profile.NotifyChannel("webhook", Map.of("url", "https://a.example.com"));
-    Profile.NotifyChannel chB =
-        new Profile.NotifyChannel("webhook", Map.of("url", "https://b.example.com"));
-    ProfileContext.set(profileWithChannels(chA, chB));
+    when(registry.list())
+        .thenReturn(
+            List.of(
+                new NotifyChannelDef("a", "webhook", "https://a.example.com", null),
+                new NotifyChannelDef("b", "webhook", "https://b.example.com", null)));
 
     notifyTools.execute("{\"content\":\"hi\"}");
 
@@ -132,11 +105,11 @@ class NotifyToolsTest {
   }
 
   @Test
-  @DisplayName("内联渠道类型没有对应适配器实现时明确报错")
+  @DisplayName("注册渠道类型没有对应适配器实现时明确报错")
   void reportsErrorWhenAdapterTypeUnsupported() {
-    Profile.NotifyChannel ch =
-        new Profile.NotifyChannel("sms", Map.of("url", "https://sms.example.com/send"));
-    ProfileContext.set(profileWithChannels(ch));
+    when(registry.list())
+        .thenReturn(
+            List.of(new NotifyChannelDef("sms", "sms", "https://sms.example.com/send", null)));
 
     ToolResult result = notifyTools.execute("{\"content\":\"hi\"}");
 
@@ -156,28 +129,14 @@ class NotifyToolsTest {
             new HttpSandboxProperties(List.of()));
     NotifyTools tools =
         new NotifyTools(Map.of("webhook", new WebhookNotifyAdapter(realSandbox)), registry);
-    Profile.NotifyChannel ch =
-        new Profile.NotifyChannel("webhook", Map.of("url", "https://example.com/webhook"));
-    ProfileContext.set(profileWithChannels(ch));
+    when(registry.list())
+        .thenReturn(
+            List.of(new NotifyChannelDef("ops", "webhook", "https://example.com/webhook", null)));
 
     ToolResult result = tools.execute("{\"content\":\"danger\"}");
 
     assertThat(result.success()).isFalse();
     assertThat(result.errorMessage()).contains("不在白名单内");
-  }
-
-  @Test
-  @DisplayName("channel 指定类型但内联渠道里没有该类型时明确报错,不回退默认(避免发错地方)")
-  void reportsErrorWhenChannelTypeNotFoundInInline() {
-    Profile.NotifyChannel ch =
-        new Profile.NotifyChannel("webhook", Map.of("url", "https://a.example.com"));
-    ProfileContext.set(profileWithChannels(ch));
-
-    ToolResult result = notifyTools.execute("{\"content\":\"hi\",\"channel\":\"feishu\"}");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errorMessage()).contains("feishu").contains("不存在");
-    verify(adapter, never()).send(any(), any());
   }
 
   /** 段外固定端口:本机内核临时端口段(44620-48715)会被 IDE 的长连接池占满,随机绑定偶发 EADDRINUSE。 */
@@ -202,9 +161,10 @@ class NotifyToolsTest {
       doNothing().when(sandbox).enforce(any());
       NotifyTools tools =
           new NotifyTools(Map.of("webhook", new WebhookNotifyAdapter(sandbox)), registry);
-      Profile.NotifyChannel ch =
-          new Profile.NotifyChannel("webhook", Map.of("url", server.url("/webhook").toString()));
-      ProfileContext.set(profileWithChannels(ch));
+      when(registry.list())
+          .thenReturn(
+              List.of(
+                  new NotifyChannelDef("ops", "webhook", server.url("/webhook").toString(), null)));
 
       ToolResult result = tools.execute("{\"content\":\"hello\"}");
 

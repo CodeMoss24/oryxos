@@ -83,7 +83,7 @@ class AgentLifecycleServiceTest {
   void create_runsExistsCheckScaffoldDeriveRegisterInOrder() throws Exception {
     Path agentDir = Path.of("/w/agents/weather-daily");
     when(profileRegistry.exists("weather-daily")).thenReturn(false);
-    when(agentStore.scaffold("weather-daily", "每日天气")).thenReturn(agentDir);
+    when(agentStore.scaffold("weather-daily", "每日天气", null)).thenReturn(agentDir);
     when(agentLoader.parseAgentMd(any(Path.class))).thenReturn(new ParsedAgentMd(Map.of(), ""));
     Profile profile = profileNamed("weather-daily");
     when(agentLoader.deriveProfile(eq("weather-daily"), any())).thenReturn(profile);
@@ -93,7 +93,7 @@ class AgentLifecycleServiceTest {
     assertThat(result).isSameAs(profile);
     InOrder inOrder = inOrder(profileRegistry, agentStore, agentLoader, agentScheduler);
     inOrder.verify(profileRegistry).exists("weather-daily");
-    inOrder.verify(agentStore).scaffold("weather-daily", "每日天气");
+    inOrder.verify(agentStore).scaffold("weather-daily", "每日天气", null);
     inOrder.verify(agentLoader).parseAgentMd(agentDir.resolve("AGENT.md"));
     inOrder.verify(agentLoader).deriveProfile(eq("weather-daily"), any());
     inOrder.verify(profileRegistry).register(profile);
@@ -106,7 +106,7 @@ class AgentLifecycleServiceTest {
   void create_withSchedules_registersScheduler() throws Exception {
     Path agentDir = Path.of("/w/agents/weather-daily");
     when(profileRegistry.exists("weather-daily")).thenReturn(false);
-    when(agentStore.scaffold("weather-daily", "每日天气")).thenReturn(agentDir);
+    when(agentStore.scaffold("weather-daily", "每日天气", null)).thenReturn(agentDir);
     when(agentLoader.parseAgentMd(any(Path.class))).thenReturn(new ParsedAgentMd(Map.of(), ""));
     Profile profile = profileNamed("weather-daily", sc("weather-daily-morning"));
     when(agentLoader.deriveProfile(eq("weather-daily"), any())).thenReturn(profile);
@@ -125,7 +125,7 @@ class AgentLifecycleServiceTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("dupe");
 
-    verify(agentStore, never()).scaffold(anyString(), anyString());
+    verify(agentStore, never()).scaffold(anyString(), anyString(), any());
   }
 
   @Test
@@ -133,7 +133,7 @@ class AgentLifecycleServiceTest {
   void create_registrationFailureRollsBackScaffoldedDir() throws Exception {
     Path agentDir = Path.of("/w/agents/rollback-me");
     when(profileRegistry.exists("rollback-me")).thenReturn(false);
-    when(agentStore.scaffold("rollback-me", "x")).thenReturn(agentDir);
+    when(agentStore.scaffold("rollback-me", "x", null)).thenReturn(agentDir);
     when(agentLoader.parseAgentMd(any(Path.class))).thenReturn(new ParsedAgentMd(Map.of(), ""));
     doThrow(new ProfileValidationException("bad AGENT.md"))
         .when(agentLoader)
@@ -186,7 +186,8 @@ class AgentLifecycleServiceTest {
     lifecycle.delete("to-delete");
 
     InOrder inOrder = inOrder(agentScheduler, profileRegistry, agentStore);
-    inOrder.verify(agentScheduler).unregisterProfile(profile);
+    // 30 节改版:逐条 deleteTask(句柄取消 + 库记录清),不再整 Profile unregister
+    inOrder.verify(agentScheduler).deleteTask("to-delete-morning");
     inOrder.verify(profileRegistry).remove("to-delete");
     inOrder.verify(agentStore).archive("to-delete");
   }

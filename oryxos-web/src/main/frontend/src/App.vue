@@ -18,7 +18,7 @@ const TOP_NAV = [
 ]
 
 const RUNTIME_NAV = [
-  { key: 'sessions', label: '会话列表', path: '/api/v1/sessions' },
+  { key: 'sessions', label: '会话列表', path: '/api/v1/sessions?status=active' },
   { key: 'providers', label: 'Provider 列表' },
   { key: 'mcp', label: 'MCP 管理' },
   { key: 'tools', label: 'Tool 列表', path: '/api/v1/tools' },
@@ -307,6 +307,17 @@ function closeSession() {
   sessionDetail.value = null
 }
 
+// 归档会话:调 DELETE /sessions/{id}(标记 archived,数据保留),归档后从本地列表移除;列表只显示 active,刷新后自动消失
+async function archiveSession(id) {
+  if (!confirm(`归档会话 ${id}？归档后不再出现在列表（数据保留在库）。`)) return
+  try {
+    const res = await fetch(`/api/v1/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '归档失败')
+    state.sessions.data = state.sessions.data.filter((r) => r.sessionId !== id)
+  } catch (e) { alert('归档失败：' + e.message) }
+}
+
 // 对话角色的中文标签
 function roleLabel(role) {
   return { user: '用户', assistant: '助手', tool: '工具' }[role] ?? role
@@ -370,6 +381,57 @@ async function toggleTask(row) {
   }
 }
 
+// 删除定时任务（DELETE /schedules/{id}）：从该 Agent 的 AGENT.md 移除条目 + 注销句柄 + 清库。幽灵任务（Agent 已归档）直接清库。
+async function deleteTask(row) {
+  if (!confirm(`删除定时任务「${row.taskId}」？\n会从 ${row.profileName} 的 AGENT.md 移除 schedules 条目，并清空它的执行历史。`)) return
+  busy.value = row.taskId
+  try {
+    const res = await fetch(`/api/v1/schedules/${encodeURIComponent(row.taskId)}`, { method: 'DELETE' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '删除失败')
+    await load('schedules')
+  } catch (e) {
+    state.schedules = { ...state.schedules, error: e.message }
+  } finally {
+    busy.value = null
+  }
+}
+
+// 添加定时任务：选 Agent + cron，写进该 Agent 的 AGENT.md schedules（定义源与创建 Agent 填 cron 同一处）
+const schedForm = reactive({ open: false, agent: '', cron: '', message: '', busy: false, error: null })
+function openSchedForm() {
+  if (!agents.value.data.length) loadAgents() // 下拉数据源：Agent 列表（已有复用）；script 里 ref 必须 .value，模板才自动解包
+  schedForm.agent = ''
+  schedForm.cron = ''
+  schedForm.message = ''
+  schedForm.error = null
+  schedForm.open = true
+}
+async function submitSchedForm() {
+  schedForm.busy = true
+  schedForm.error = null
+  try {
+    const res = await fetch('/api/v1/schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent: schedForm.agent,
+        cron: schedForm.cron.trim(),
+        zone: 'Asia/Shanghai',
+        message: schedForm.message.trim() || undefined,
+      }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '添加失败')
+    schedForm.open = false
+    await load('schedules')
+  } catch (e) {
+    schedForm.error = e.message
+  } finally {
+    schedForm.busy = false
+  }
+}
+
 // —— 30 节：Agent 管理（动态增删改 + 一句话生成）——
 const agents = ref({ loading: false, error: null, data: [] })
 const triggering = ref(null) // 正在“立即触发”的 agent 名，防重复点击
@@ -388,8 +450,8 @@ async function loadAgents() {
 // 新建 Agent：独立成页（不再是弹框），把「大模型生成」折叠进来。
 // 只填 name + description 可直接按模板脚手架；也可先「用大模型生成」各文件、编辑后再创建。
 const agentCreate = reactive({
-  open: false, name: '', description: '', provider: '', model: '', notifyChannel: '', skills: [],
-  requiredSkills: [], suggestedSkills: [], files: null, busy: false, error: '',
+  open: false, name: '', description: '', provider: '', model: '', skills: [],
+  cron: '', requiredSkills: [], suggestedSkills: [], files: null, busy: false, error: '',
 })
 
 // 新建页用的 provider / model 下拉数据源：provider 来自 GET /providers；model 来自 GET /providers/{name}/models（服务端代理）
@@ -416,21 +478,20 @@ async function loadCreateModels(name) {
 }
 function onProviderChange() { agentCreate.model = ''; loadCreateModels(agentCreate.provider) }
 
-// 打开新建页：重置字段 + 拉通知渠道下拉数据
+// 打开新建页：重置字段 + 拉各下拉数据源
 function openCreate() {
   agentCreate.open = true
   agentCreate.name = ''
   agentCreate.description = ''
   agentCreate.provider = ''
   agentCreate.model = ''
-  agentCreate.notifyChannel = ''
+  agentCreate.cron = ''
   agentCreate.skills = []
   agentCreate.requiredSkills = []
   agentCreate.suggestedSkills = []
   agentCreate.files = null
   agentCreate.busy = false
   agentCreate.error = ''
-  loadNotifyChannels()
   loadSkills() // Skill 选择器的数据源（可手动指定必启用的 Skill；不选则由作者模型自动选）
   loadCreateProviders() // provider 下拉数据源
 }
@@ -444,7 +505,7 @@ async function generateFiles() {
   try {
     const res = await fetch(`/api/v1/agents/${encodeURIComponent(agentCreate.name)}/generate-files`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: agentCreate.description, notifyChannel: agentCreate.notifyChannel, requiredSkills: agentCreate.skills, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined }),
+      body: JSON.stringify({ description: agentCreate.description, requiredSkills: agentCreate.skills, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined }),
     })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '生成失败')
@@ -467,7 +528,7 @@ async function submitCreate() {
         })
         : await fetch('/api/v1/agents', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined, skillBindings: agentCreate.skills }),
+          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined, skillBindings: agentCreate.skills, schedule: agentCreate.cron.trim() ? { cron: agentCreate.cron.trim() } : undefined }),
         })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '创建失败')
@@ -834,7 +895,19 @@ const renderedMd = computed(() =>
     : ''
 )
 // 会话：每个 Agent 一个固定 session，直接作为对话展示（不再是会话列表）
-const chat = reactive({ sessionId: null, messages: [], loading: false, error: null, input: '', sending: false })
+// messages 是聚合视图：固定会话优先，再并入该 Agent 最近其他会话（invoke/scheduler）的消息，每条带 source 标注来源
+const chat = reactive({ sessionId: null, messages: [], sessions: [], loading: false, error: null, input: '', sending: false })
+
+// 会话来源缩写：完整 sessionId 形如 admin:console:name / invoke:default:name / scheduler:scheduler:name
+function sourceLabel(src) {
+  if (!src) return ''
+  if (src.startsWith('admin:console:')) return '管理台'
+  if (src.startsWith('scheduler:')) return '定时'
+  if (src.startsWith('invoke:')) return '手动调用'
+  if (src.startsWith('web:')) return 'Web 调用'
+  if (src.startsWith('cli:')) return 'CLI'
+  return src
+}
 
 const CHAT_SEND_MODE_KEY = 'oryxos.admin.chatSendMode'
 const CHAT_SEND_MODES = ['enter', 'modifier']
@@ -1091,6 +1164,7 @@ async function loadChat() {
     if (body.code !== 0) throw new Error(body.message || '加载失败')
     chat.sessionId = body.data.sessionId
     chat.messages = body.data.messages || []
+    chat.sessions = body.data.sessions || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
 }
 
@@ -1124,7 +1198,8 @@ async function loadMemory() {
     const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/memory`)
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
-    agentMemory.text = body.data || ''
+    // 后端契约: data: { memory: "<MEMORY.md 全文>" }——取 memory 字段,不是 data 本身
+    agentMemory.text = (body.data?.memory ?? '') || ''
   } catch (e) { agentMemory.error = e.message } finally { agentMemory.loading = false }
 }
 
@@ -1164,7 +1239,8 @@ async function openFile(node) {
     const res = await fetch(`/api/v1/workspace/file?path=${encodeURIComponent(node.path)}`)
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
-    fileView.value = { path: node.path, loading: false, error: null, content: body.data, saving: false, saved: false }
+    // 后端契约: data: { path, content }——取 content 字段;缺省兜空串,绝不能把整个 object 塞给 marked(否则渲染崩溃全页黑屏)
+    fileView.value = { path: node.path, loading: false, error: null, content: (body.data?.content ?? '') || '', saving: false, saved: false }
   } catch (e) {
     fileView.value = { path: node.path, loading: false, error: e.message, content: '', saving: false, saved: false }
   }
@@ -1196,10 +1272,14 @@ function flatten(node, depth, acc) {
   return acc
 }
 const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail.value.node, 0, []) : []))
-// 「输出」tab：读共享产出目录 .oryxos/output/（Agent 落盘研报/汇总/导出的地方），扁平成文件行
+// 「输出」tab：读共享产出目录 .oryxos/output/（AgentService 每次执行完自动落盘 output/<agent>/<日期>.md），按当前 Agent 过滤
 const outputNode = computed(() => agentDetail.value?.outputTree || null)
 const outputRows = computed(() =>
-  outputNode.value ? flatten(outputNode.value, 0, []).filter((n) => n.type === 'file') : [],
+  outputNode.value
+    ? flatten(outputNode.value, 0, []).filter(
+        (n) => n.type === 'file' && n.path.startsWith('output/' + (agentDetail.value?.name || '') + '/'),
+      )
+    : [],
 )
 </script>
 
@@ -1505,11 +1585,8 @@ const outputRows = computed(() =>
                 <p v-else-if="createProviders.error" class="error">Provider 列表加载失败：{{ createProviders.error }}</p>
                 <p v-else-if="agentCreate.provider && createModels.loading" class="empty">加载模型列表…</p>
                 <p v-else-if="agentCreate.provider && createModels.error" class="error">模型列表加载失败：{{ createModels.error }}</p>
-                <label class="empty" style="display:block;margin:6px 0 2px">通知渠道（投递目标，由你手动选；不选=本 Agent 不发通知）</label>
-                <select v-model="agentCreate.notifyChannel" class="gen-input">
-                  <option value="">不通知</option>
-                  <option v-for="c in (notifyChannels.data || [])" :key="c.name" :value="c.name">{{ c.name }}（{{ c.type }}）</option>
-                </select>
+                <label class="empty" style="display:block;margin:6px 0 2px">定时（cron 表达式，留空=不定时；时区固定 Asia/Shanghai）</label>
+                <input v-model="agentCreate.cron" class="gen-input" placeholder="如 0 0 9 * * *（每天 9 点）；0 30 8 * * MON（每周一 8:30）" />
                 <label class="empty" style="display:block;margin:6px 0 2px">Skill 绑定（勾选=required；作者可从已安装 Skill 再建议）</label>
                 <div class="skill-picker">
                   <span v-if="!skills.data.length" class="empty">（暂无已安装 Skill，可先到 Skill 页新建或从 GitHub 拉取）</span>
@@ -1587,7 +1664,6 @@ const outputRows = computed(() =>
                   <div class="info-row"><span class="k">description</span><span>{{ agentDetail.agent.description || '—' }}</span></div>
                   <div class="info-row"><span class="k">provider</span><span>{{ agentDetail.agent.provider || '—' }}</span></div>
                   <div class="info-row"><span class="k">model</span><span>{{ agentDetail.agent.model || '—' }}</span></div>
-                  <div class="info-row"><span class="k">tools</span><span>{{ (agentDetail.agent.tools || []).join(', ') || '—' }}</span></div>
                   <div class="info-row"><span class="k">skills</span>
                     <div>
                       <div class="skill-picker">
@@ -1688,7 +1764,10 @@ const outputRows = computed(() =>
 
               <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
-                <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
+                <div class="sess-meta">
+                  <span class="empty">会话 ID：</span><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span>
+                  <span v-if="chat.sessions.length > 1" class="empty">（含最近 {{ chat.sessions.length }} 个会话的对话，徽标标注来源）</span>
+                </div>
                 <p v-if="chat.loading" class="empty">加载中…</p>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
@@ -1697,7 +1776,7 @@ const outputRows = computed(() =>
                     <div v-for="(t, i) in chatTurns" :key="i" class="turn">
                       <!-- 用户提问 -->
                       <div v-if="t.user" class="msg user">
-                        <div class="msg-role">{{ roleLabel('user') }}</div>
+                        <div class="msg-role">{{ roleLabel('user') }}<span v-if="t.user.source" class="src-tag">{{ sourceLabel(t.user.source) }}</span></div>
                         <pre class="msg-body">{{ t.user.content || '（空）' }}</pre>
                       </div>
                       <!-- 思考 + 工具调用：整轮收拢、默认折叠 -->
@@ -1707,14 +1786,14 @@ const outputRows = computed(() =>
                         </button>
                         <div v-if="expandedTurns.has(i)" class="steps-body">
                           <div v-for="(m, j) in t.steps" :key="j" :class="['msg', m.role]">
-                            <div class="msg-role">{{ roleLabel(m.role) }}<span v-if="m.toolName" class="mono tool-name"> · {{ m.toolName }}</span></div>
+                            <div class="msg-role">{{ roleLabel(m.role) }}<span v-if="m.source" class="src-tag">{{ sourceLabel(m.source) }}</span></div>
                             <pre class="msg-body">{{ m.content || '（空）' }}</pre>
                           </div>
                         </div>
                       </div>
                       <!-- 最终答案：突出显示 -->
                       <div v-if="t.answer" class="msg assistant answer">
-                        <div class="msg-role">{{ roleLabel('assistant') }}</div>
+                        <div class="msg-role">{{ roleLabel('assistant') }}<span v-if="t.answer.source" class="src-tag">{{ sourceLabel(t.answer.source) }}</span></div>
                         <pre class="msg-body">{{ t.answer.content || '（空）' }}</pre>
                       </div>
                     </div>
@@ -1815,15 +1894,14 @@ const outputRows = computed(() =>
               <p v-if="agents.loading" class="empty">加载中…</p>
               <p v-else-if="agents.error" class="error">出错：{{ agents.error }}</p>
               <table v-else>
-                <thead><tr><th>name</th><th>description</th><th>provider</th><th>model</th><th>tools</th><th>定时</th><th>操作</th></tr></thead>
+                <thead><tr><th>name</th><th>description</th><th>provider</th><th>model</th><th>定时</th><th>操作</th></tr></thead>
                 <tbody>
-                  <tr v-if="!agents.data.length"><td colspan="7" class="empty">（暂无 Agent · 点上面「新建 Agent」，或往 .oryxos/agents/ 丢一个目录）</td></tr>
+                  <tr v-if="!agents.data.length"><td colspan="6" class="empty">（暂无 Agent · 点上面「新建 Agent」，或往 .oryxos/agents/ 丢一个目录）</td></tr>
                   <tr v-for="a in agents.data" :key="a.name">
                     <td class="mono">{{ a.name }}</td>
                     <td>{{ a.description || '—' }}</td>
                     <td>{{ a.provider }}</td>
                     <td>{{ a.model || '—' }}</td>
-                    <td>{{ (a.tools || []).join(', ') }}</td>
                     <td class="mono">{{ (a.schedules || []).map((s) => s.cron).join('; ') || '—' }}</td>
                     <td class="ops">
                       <button class="btn" :disabled="triggering === a.name" @click="triggerAgent(a)">{{ triggering === a.name ? '触发中…' : '立即触发' }}</button>
@@ -2022,8 +2100,36 @@ const outputRows = computed(() =>
             <p v-if="state[active]?.loading" class="empty">加载中…</p>
           <p v-else-if="state[active]?.error" class="error">出错：{{ state[active].error }}</p>
           <template v-else-if="state[active]?.data != null">
-            <!-- schedules：定时任务，带管理动作（立即执行 / 启用停用 / 执行记录）——28 节，管理台可管 -->
+            <!-- schedules：定时任务，带管理动作（立即执行 / 启用停用 / 执行记录 / 添加 / 删除）——28 节 + 30 节管理闭环 -->
             <template v-if="active === 'schedules'">
+              <div class="toolbar">
+                <button class="btn btn-primary" @click="openSchedForm()">+ 添加定时任务</button>
+              </div>
+              <!-- 添加定时任务弹窗：定义源是该 Agent 的 AGENT.md schedules，与创建 Agent 填 cron 同一处 -->
+              <div v-if="schedForm.open" class="modal-overlay" @click.self="schedForm.open = false">
+                <div class="modal-card">
+                  <div class="modal-head">
+                    <h3>添加定时任务</h3>
+                    <button class="modal-x" @click="schedForm.open = false">✕</button>
+                  </div>
+                  <div class="modal-body">
+                    <label class="empty" style="display:block;margin:6px 0 2px">Agent（定时任务挂在这个 Agent 上，到点触发它）</label>
+                    <select v-model="schedForm.agent" class="gen-input">
+                      <option value="" disabled>— 请选择 Agent —</option>
+                      <option v-for="a in (agents.data || [])" :key="a.name" :value="a.name">{{ a.name }}</option>
+                    </select>
+                    <label class="empty" style="display:block;margin:6px 0 2px">cron 表达式（时区固定 Asia/Shanghai）</label>
+                    <input v-model="schedForm.cron" class="gen-input" placeholder="如 0 0 9 * * *（每天 9 点）；0 30 8 * * MON（每周一 8:30）" />
+                    <label class="empty" style="display:block;margin:6px 0 2px">触发消息（到点传给 Agent 的话，留空用默认）</label>
+                    <textarea v-model="schedForm.message" class="gen-draft" rows="3" placeholder="如：到点了，抓取最新 PR 并推送到飞书。"></textarea>
+                    <p v-if="schedForm.error" class="error">{{ schedForm.error }}</p>
+                  </div>
+                  <div class="modal-foot">
+                    <button class="btn" @click="schedForm.open = false">取消</button>
+                    <button class="btn btn-primary" :disabled="schedForm.busy || !schedForm.agent || !schedForm.cron.trim()" @click="submitSchedForm">{{ schedForm.busy ? '添加中…' : '添加' }}</button>
+                  </div>
+                </div>
+              </div>
               <!-- 执行记录详情视图 -->
               <div v-if="execDetail">
                 <button class="btn back" @click="closeExecutions">← 返回定时任务</button>
@@ -2062,6 +2168,7 @@ const outputRows = computed(() =>
                       <button class="btn" :disabled="busy === row.taskId" @click="runTask(row.taskId)">立即执行</button>
                       <button class="btn" :disabled="busy === row.taskId" @click="toggleTask(row)">{{ row.enabled ? '停用' : '启用' }}</button>
                       <button class="btn" @click="openExecutions(row.taskId)">执行记录</button>
+                      <button class="btn" :disabled="busy === row.taskId" @click="deleteTask(row)">删除</button>
                     </td>
                   </tr>
                 </tbody>
@@ -2100,7 +2207,10 @@ const outputRows = computed(() =>
                   <tr v-if="!state.sessions.data.length"><td :colspan="cols('sessions').length + 1" class="empty">（暂无会话）</td></tr>
                   <tr v-for="(row, i) in state.sessions.data" :key="i">
                     <td v-for="c in cols('sessions')" :key="c" :class="{ mono: c === 'sessionId' }">{{ row[c] }}</td>
-                    <td class="ops"><button class="btn" @click="openSession(row.sessionId)">查看对话</button></td>
+                    <td class="ops">
+                      <button class="btn" @click="openSession(row.sessionId)">查看对话</button>
+                      <button class="btn" :disabled="row.status === 'archived'" @click="archiveSession(row.sessionId)">归档</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -2177,6 +2287,8 @@ th { color: var(--text-2); font-weight: 500; }
 .msg.tool { align-self: flex-start; background: var(--bg-mute); }
 .msg-role { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
 .tool-name { color: var(--brand); }
+/* 会话来源徽标:管理台 / 定时 / 手动调用 等 */
+.src-tag { margin-left: 8px; padding: 0 6px; border: 1px solid var(--border); border-radius: 8px; font-size: 11px; color: var(--text-3); }
 .msg-body { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 .msg.tool .msg-body { font-family: var(--font-mono); font-size: 13px; color: var(--text-2); }
 /* 一轮对话分组：用户 + 折叠的过程 + 最终答案，整轮留白 */
@@ -2300,3 +2412,4 @@ th { color: var(--text-2); font-weight: 500; }
 @media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
 
 </style>
+

@@ -105,12 +105,15 @@ class RestartRecoveryIT {
     // 与 SessionManager.buildSessionId 的 ":" 分隔一致(28 节交付时误写 "+",出生即带病,本节显式跑 IT 暴露)
     String sessionId = "scheduler:scheduler:recovery-agent";
 
-    // ① 会话在 SQLite(GET /sessions/{id} 查得到完整历史)
+    // ① 会话在 SQLite(GET /sessions/{id} 查得到完整历史;ba79a1b 起 data 为 {sessionId, profileName, messages}
+    // 对象)
     @SuppressWarnings("unchecked")
-    List<Map<String, Object>> history =
-        (List<Map<String, Object>>)
+    Map<String, Object> history =
+        (Map<String, Object>)
             rest.getForEntity("/api/v1/sessions/" + sessionId, Map.class).getBody().get("data");
-    assertThat(history).isNotEmpty();
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> messages = (List<Map<String, Object>>) history.get("messages");
+    assertThat(messages).isNotEmpty();
     // 会话元数据也在 SQLite(sessions 表非空)
     assertThat(sessionRepository.findById(sessionId)).isPresent();
 

@@ -42,21 +42,21 @@ public class AgentStore {
   /**
    * 脚手架一个完整 Agent 目录:AGENT.md + scripts/ + skills/ + REFERENCE.md(模板内容,可解析)。
    *
-   * <p>provider 写 deepseek + deepseek-chat 作模板起点(31 节 Demo 与运营后续手工改),tools 给基础集, 正文由 description
-   * 派生一句任务指令。返回 agentDir,供失败回滚。
+   * <p>provider 写 deepseek + deepseek-chat 作模板起点(31 节 Demo 与运营后续手工改),31 节起 tools / notify_channels
+   * 不再内联——工具走全局列表、通知出口走全局注册表,模板不写这两个键。正文由 description 派生一句任务指令。 返回 agentDir,供失败回滚。
    */
-  public Path scaffold(String name, String description) {
+  /** schedule:创建时即写入 AGENT.md 的定时配置{cron, zone, message},null = 不定时。 */
+  public Path scaffold(String name, String description, AgentStore.ScheduleDraft schedule) {
     Path dir = agentDir(name);
     try {
       Files.createDirectories(dir.resolve("scripts"));
       Files.createDirectories(dir.resolve("skills"));
-      Files.writeString(dir.resolve("AGENT.md"), scaffoldAgentMd(name, description));
+      Files.writeString(dir.resolve("AGENT.md"), scaffoldAgentMd(name, description, schedule));
       Files.writeString(
           dir.resolve("scripts").resolve("README.md"),
           "# scripts\n\n放这个 Agent 的可执行脚本(如 `reconcile.py`),正文用 `shell` 按需调用。\n");
-      Files.writeString(
-          dir.resolve("skills").resolve("README.md"),
-          "# skills\n\n放这个 Agent 的子指令(如 `report-format.md`),正文用 `read_file` 按需读取。\n");
+      // 注意:skills/ 是 Skill 绑定的唯一真相目录,只放固定软连接——不放 README 等普通文件,
+      // 否则绑定校验器会把非软连接条目报为"损坏绑定"(INVALID_TARGET),导致 replaceBindings 整体拒绝。
       Files.writeString(
           dir.resolve("REFERENCE.md"),
           "# REFERENCE\n\n放参考材料,正文用 `read_file` 按需读取。渐进式披露:目录里的子指令/脚本/参考不预载。\n");
@@ -66,46 +66,64 @@ public class AgentStore {
     }
   }
 
-  private static String scaffoldAgentMd(String name, String description) {
-    return "---\n"
-        + "name: "
-        + name
-        + "\n"
-        + "description: "
-        + description
-        + "\n"
-        + "provider:\n"
-        + "  name: deepseek\n"
-        + "  model: deepseek-chat\n"
-        + "identity:\n"
-        + "  agent_name: "
-        + name
-        + "\n"
-        + "  prompt: 你是 "
-        + name
-        + ",专注完成自己的任务\n"
-        + "tools:\n"
-        + "  - read_file\n"
-        + "  - write_file\n"
-        + "  - list_dir\n"
-        + "  - http_get\n"
-        + "  - http_post\n"
-        + "  - save_memory\n"
-        + "  - recall_memory\n"
-        + "  - notify\n"
-        + "---\n"
-        + "\n"
-        + "你是 "
-        + name
-        + "。你的任务:"
-        + description
-        + "\n\n"
-        + "执行步骤:\n"
-        + "1. 明确今天要做什么(目标拆解)。\n"
-        + "2. 用内置工具按需取数(http_get / read_file / shell)。\n"
-        + "3. 汇总产出,按用户要求格式输出。\n\n"
-        + "产出格式:清晰、可执行;失败时说明原因并给出兜底建议。\n";
+  private static String scaffoldAgentMd(
+      String name, String description, AgentStore.ScheduleDraft schedule) {
+    StringBuilder sb =
+        new StringBuilder("---\n")
+            .append("name: ")
+            .append(name)
+            .append("\n")
+            .append("description: ")
+            .append(description)
+            .append("\n")
+            .append("provider:\n")
+            .append("  name: deepseek\n")
+            .append("  model: deepseek-chat\n")
+            .append("identity:\n")
+            .append("  agent_name: ")
+            .append(name)
+            .append("\n")
+            .append("  prompt: 你是 ")
+            .append(name)
+            .append(",专注完成自己的任务\n");
+    if (schedule != null && schedule.cron() != null && !schedule.cron().isBlank()) {
+      sb.append("schedules:\n")
+          .append("  - id: ")
+          .append(name)
+          .append("-schedule\n")
+          .append("    cron: ")
+          .append(schedule.cron())
+          .append("\n")
+          .append("    zone: ")
+          .append(
+              schedule.zone() == null || schedule.zone().isBlank()
+                  ? "Asia/Shanghai"
+                  : schedule.zone())
+          .append("\n")
+          .append("    message: ")
+          .append(
+              schedule.message() == null || schedule.message().isBlank()
+                  ? "到点了,执行今天的任务。"
+                  : schedule.message())
+          .append("\n");
+    }
+    sb.append("---\n")
+        .append("\n")
+        .append("你是 ")
+        .append(name)
+        .append("。你的任务:")
+        .append(description)
+        .append("\n\n")
+        .append("执行步骤:\n")
+        .append("1. 明确今天要做什么(目标拆解)。\n")
+        .append("2. 用内置工具按需取数(http_get / read_file / shell)。\n")
+        .append("3. 汇总产出,按用户要求格式输出。\n\n")
+        .append("产出格式:清晰、可执行;失败时说明原因并给出兜底建议。\n");
+    return sb.toString();
   }
+
+  /** 创建时可选定时草稿(与 web 层 CreateAgentRequest.ScheduleDraft 同构,避免 core 依赖 web 包)。 */
+  public record ScheduleDraft(String cron, String zone, String message) {}
 
   /** 读取 AGENT.md 全文(管理台"基本信息"编辑先读后改)。目录不存在或不可读抛 IllegalArgumentException(→400)。 */
   public String read(String name) {

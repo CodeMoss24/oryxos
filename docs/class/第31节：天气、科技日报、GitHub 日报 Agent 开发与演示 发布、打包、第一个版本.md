@@ -29,10 +29,8 @@ name: weather-daily
 description: 每天早上查北京天气并推送穿搭建议
 provider: deepseek
 model: deepseek-chat
-tools: [http_get, notify]
-notify_channels:
-  - type: webhook
-    url: ${TEAM_WEBHOOK_URL}
+# 31 节起 AGENT.md 不再内联 tools / notify_channels:
+# 工具走全局 ToolRegistry(全部可用),notify 出口走全局 NotifyChannelRegistry(管理台配渠道)
 schedules:
   - {cron: "0 0 8 * * *", zone: Asia/Shanghai, message: 到点了，按你的说明执行。}
 ---
@@ -43,12 +41,12 @@ schedules:
 3. 把"今日天气 + 穿搭建议"组织成一条消息，调用 notify 发送出去。
 ```
 
-天气源钉死用 **open-meteo**（免费、免 API key、返回 JSON），白名单里加 `api.open-meteo.com`；`notify_channels` 用 28 节配好的团队 webhook——前置条件清单这时兑现价值。不自己挑 API 的原因很实际：Demo 现场最怕"接口要注册账号 / 要充值 / 被墙"这类和课程无关的意外。（最小权限体现在 `tools` 只给 `http_get`/`notify`——它不读子指令、不跑脚本，就不给 `read_file`/`shell`。）
+天气源钉死用 **open-meteo**（免费、免 API key、返回 JSON），白名单里加 `api.open-meteo.com`；notify 出口用全局渠道注册表里配好的团队 webhook（管理台 `POST /api/v1/notify-channels` 注册，`notify` 工具按名解析，未指名用第一个渠道）——前置条件清单这时兑现价值。不自己挑 API 的原因很实际：Demo 现场最怕"接口要注册账号 / 要充值 / 被墙"这类和课程无关的意外。（工具不再在 AGENT.md 里声明白名单，全局 ToolRegistry 全量可见；Demo 不需要的子指令/脚本能力靠正文不引导使用来规避。）
 
 > **跑起来之前，先过三道环境门（不过就是空转，别急着等钟推）：**
 > 1. **启动 key**：`export DEEPSEEK_API_KEY=...`。因为 26 节已排除 `OpenAiAutoConfiguration`，`serve` 只需要这一个 key 就能起——若它还索要 `spring.ai.openai.api-key`，说明 26 节那个排除没落地，回去补。
 > 2. **白名单**（24 节 Sandbox 默认 deny-all，会拦自己）：`http.allowed_domains` 里必须有 `api.open-meteo.com` **和** 团队 webhook 的域名（飞书 `*.feishu.cn` / 企业微信 `qyapi.weixin.qq.com`，按实际渠道）。少一个，`tool_invocations` 就是一片 `success=false`。
-> 3. **webhook 可达**：一个真能收消息的群机器人地址，配进 `notify_channels`。
+> 3. **webhook 可达**：一个真能收消息的群机器人地址，在管理台「通知渠道」注册成命名渠道（`POST /api/v1/notify-channels`）。
 
 **第二步：调试，先人推再钟推。** 别干等八点。先手动补跑一次把链路调通：
 
@@ -92,10 +90,8 @@ name: daily-tech-digest
 description: 每天早上编一份科技日报推送到群
 provider: deepseek
 model: deepseek-chat
-tools: [http_get, read_file, notify]     # read_file 用来读 skills/ 里的子指令
-notify_channels:
-  - type: webhook
-    url: ${TEAM_WEBHOOK_URL}
+# 31 节起 AGENT.md 不再内联 tools / notify_channels:
+# 工具走全局 ToolRegistry(read_file 用来读 skills/ 里的子指令),notify 出口走全局 NotifyChannelRegistry
 schedules:
   - {cron: "0 0 9 * * *", zone: Asia/Shanghai, message: 到点了，编今天的科技日报。}
 ---
@@ -138,10 +134,8 @@ name: github-daily
 description: 每天早上编一份 GitHub 热门 + AI 项目日报推送到群
 provider: deepseek
 model: deepseek-chat
-tools: [shell, notify]     # shell 用来跑 scripts/github_trending.py
-notify_channels:
-  - type: webhook
-    url: ${TEAM_WEBHOOK_URL}
+# 31 节起 AGENT.md 不再内联 tools / notify_channels:
+# 工具走全局 ToolRegistry(shell 用来跑 scripts/github_trending.py),notify 出口走全局 NotifyChannelRegistry
 schedules:
   - {cron: "0 30 9 * * *", zone: Asia/Shanghai, message: 到点了，编今天的 GitHub 日报。}
 ---

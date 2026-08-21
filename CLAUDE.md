@@ -154,7 +154,7 @@ ReAct(Reason + Act)是 OryxOS 最核心的一段代码。输入一条用户消�
 | `ShellTools` | `shell` | 执行 bash 命令,带超时和命令白名单 |
 | `HttpTools` | `http_get` / `http_post` | 带域名白名单 |
 | `MemoryTools` | `save_memory` / `recall_memory` | 归 Memory 模块,作为内置 Tool 注册 |
-| `NotifyTools` | `notify` | 推送到 Profile `notify_channels` 配置的目标 |
+| `NotifyTools` | `notify` | 推送到全局 NotifyChannelRegistry 注册的渠道(按名解析,缺省第一个;31 节起 AGENT.md 不再内联 `notify_channels`) |
 
 ### Plugin Tool 三档接入
 
@@ -184,6 +184,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 - 入站有 Channel Adapter,出站用 `NotifyChannelAdapter.send(target, content)`
 - 核心阶段只实现 `WebhookNotifyAdapter`,复用 `Sandbox.enforce(HTTP_REQUEST, ...)` 共享 `http.allowed_domains`
 - 跟入站 Channel 是不同抽象(语义方向相反),不合并
+- **31 节起出站目标收敛为全局 `NotifyChannelRegistry`**(SQLite 持久化,`/api/v1/notify-channels` CRUD):`notify` 工具按渠道名解析,未指名用第一个注册渠道,找不到渠道 → 明确 failure 不回退;`AGENT.md` 不再内联 `notify_channels`
 
 ### 一个目录 = 一个 Agent(不是 Tool)
 
@@ -194,7 +195,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 
 ## 八、API(Web Service)
 
-核心阶段 10 个 REST 端点(会话列表为只读扩展,共 11 个),**只做查询和调用,不做创建**:
+核心阶段 REST 端点:**业务面只做查询和调用,不做创建**;创建类操作只出现在管理面(第 30 节起的 Agent 脚手架、第 31 节起的通知渠道 CRUD),供管理台使用:
 
 | 类别 | 端点 | 说明 |
 |------|------|------|
@@ -210,6 +211,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 | Agent 管理 | `GET /api/v1/agents/{name}/memory` | 该 Agent 的长期记忆全文(不截断;per-agent,取代原全局 `/api/v1/memory`) |
 | Agent 管理 | `GET /api/v1/agents/{name}/session`、`POST /{name}/session/messages` | 固定会话(channel=admin, user=console,上下文累积) |
 | 工作区 | `GET /api/v1/workspace/tree`、`GET/POST /api/v1/workspace/file?path=` | 目录树 / 读写文件(防目录穿越,AGENT.md 走 lifecycle.update) |
+| 通知渠道 | `POST /api/v1/notify-channels`、`GET /api/v1/notify-channels`、`GET/PUT/DELETE /api/v1/notify-channels/{name}` | 全局通知渠道 CRUD(31 节;`notify` 工具按名解析,缺省第一个) |
 | Tool 信息 | `GET /api/v1/tools` | 列可用 Tool |
 | 系统状态 | `GET /api/v1/health` | 健康检查 |
 | 系统状态 | `GET /api/v1/info` | 运行信息 |

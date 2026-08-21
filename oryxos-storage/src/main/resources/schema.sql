@@ -72,3 +72,45 @@ CREATE TABLE IF NOT EXISTS task_executions (
     duration_ms BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions (task_id);
+-- provider_configs:Provider 动态注册表(管理台 CRUD,name 主键;启动播种,之后注册表是唯一事实源)
+CREATE TABLE IF NOT EXISTS provider_configs (
+    name TEXT PRIMARY KEY,
+    api_key TEXT,
+    base_url TEXT,
+    description TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+
+-- notify_channels:全局通知渠道注册表(管理台 CRUD,Agent 按名引用;name 主键)
+CREATE TABLE IF NOT EXISTS notify_channels (
+    name TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    url TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+
+-- sandbox_whitelist_entries:Sandbox 白名单持久化(运行时增删写穿、重启恢复;(category, entry_value) 唯一)
+CREATE TABLE IF NOT EXISTS sandbox_whitelist_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    entry_value TEXT NOT NULL,
+    created_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sandbox_whitelist_cat_val ON sandbox_whitelist_entries (category, entry_value);
+
+-- agent_executions:Agent 每次执行历史(手动/定时都记,成功失败都记)
+CREATE TABLE IF NOT EXISTS agent_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name TEXT,
+    source TEXT,
+    session_id TEXT,
+    started_at TEXT,
+    ended_at TEXT,
+    success INTEGER,
+    error_message TEXT,
+    duration_ms BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_agent ON agent_executions (agent_name);

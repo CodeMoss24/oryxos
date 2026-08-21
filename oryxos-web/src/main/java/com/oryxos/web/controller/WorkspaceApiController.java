@@ -47,14 +47,18 @@ public class WorkspaceApiController {
     this.lifecycle = lifecycle;
   }
 
-  /** 目录树:agents/(每 Agent 一目录,可展开) + archive/;不存在的段不出现。 */
+  /** 目录树:agents/(每 Agent 一目录,可展开) + output/(执行产物,按 Agent 分子目录) + archive/;不存在的段不出现。 */
   @GetMapping("/tree")
   public ApiResponse<FileNode> tree() {
     List<FileNode> children = new ArrayList<>();
     FileNode agents = buildTree("agents");
+    FileNode output = buildTree("output");
     FileNode archive = buildTree("archive");
     if (agents != null) {
       children.add(agents);
+    }
+    if (output != null) {
+      children.add(output);
     }
     if (archive != null) {
       children.add(archive);

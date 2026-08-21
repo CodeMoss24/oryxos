@@ -11,6 +11,7 @@ import java.time.Instant;
  *   <li>{@code register}:任务注册(upsert——存在则更新定义字段,不存在则插入,enabled 默认 true)
  *   <li>{@code recordExecution}:执行落库——INSERT task_executions + UPDATE 任务运行状态四字段
  *   <li>{@code setEnabled / isEnabled}:管理台启用/停用开关
+ *   <li>{@code delete}:任务删除——删 scheduled_tasks 记录 + 该任务的 task_executions 历史(级联)
  *   <li>{@code listAll / executions}:只读查询
  * </ol>
  *
@@ -49,6 +50,9 @@ public interface ScheduledTaskStore {
 
   /** 是否启用(tryLock 前先看这里,停用则跳过)。 */
   boolean isEnabled(String taskId);
+
+  /** 删除任务:删 scheduled_tasks 记录,并级联删除该任务的 task_executions 历史。不存在的 id 幂等跳过。 */
+  void delete(String taskId);
 
   /** 列出全部任务状态(管理台列表端点用)。 */
   java.util.List<ScheduledTaskView> listAll();

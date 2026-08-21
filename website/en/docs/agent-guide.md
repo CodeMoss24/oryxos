@@ -22,9 +22,6 @@ max_iterations: 10
 schedules:
   - cron: "0 9 * * *"
     message: "Query daily weather and push notification"
-notify_channels:
-  - type: webhook
-    url: https://hooks.example.com/notify
 ---
 
 You are a daily weather assistant. Every morning, query the weather
@@ -34,6 +31,7 @@ the result via notify.
 
 - **Frontmatter**: Agent's own Profile config, auto-derived by `AgentLoader.deriveProfile()`
 - **Body**: Task instructions, injected into system prompt
+- **Tools and notify channels are NOT declared in frontmatter**: tools come from the global `ToolRegistry` (all built-in + MCP tools are available); the notify exit goes through the global channel registry in the admin console (`/api/v1/notify-channels` CRUD — the `notify` tool resolves channels by name, falling back to the first registered channel)
 
 ## Zero-code Agent Example
 

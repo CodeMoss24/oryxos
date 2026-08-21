@@ -116,13 +116,15 @@ class MockAgentE2ETest {
 
     // 会话历史完整(assistant 带 tool 消息,会话恢复×Function Calling 回归点)
     @SuppressWarnings("unchecked")
-    List<Map<String, Object>> history =
-        (List<Map<String, Object>>)
+    Map<String, Object> history =
+        (Map<String, Object>)
             rest.getForEntity("/api/v1/sessions/web:e2e-user:mock-agent", Map.class)
                 .getBody()
                 .get("data");
-    assertThat(history).hasSize(4);
-    assertThat(history.get(2).get("role")).isEqualTo("tool");
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> messages = (List<Map<String, Object>>) history.get("messages");
+    assertThat(messages).hasSize(4);
+    assertThat(messages.get(2).get("role")).isEqualTo("tool");
 
     // 审计:两轮 llm_calls 都成功;save_memory 一条 success=true
     List<LlmCallEntity> llmRows = llmCallRepository.findBySessionId("web:e2e-user:mock-agent");

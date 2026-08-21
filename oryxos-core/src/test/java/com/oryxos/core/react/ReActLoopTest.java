@@ -55,7 +55,7 @@ class ReActLoopTest {
   void returnsResponseWhenNoToolCalls() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
     when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
-    when(promptBuilder.buildToolListBlock(any())).thenReturn("");
+    when(promptBuilder.buildToolListBlock()).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(List.of());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
         .thenReturn(List.of(Message.system("system prompt")));
@@ -73,7 +73,7 @@ class ReActLoopTest {
   void executesToolAndContinuesLoop() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
     when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
-    when(promptBuilder.buildToolListBlock(any())).thenReturn("");
+    when(promptBuilder.buildToolListBlock()).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
         .thenReturn(List.of(Message.system("system prompt")));
@@ -95,7 +95,7 @@ class ReActLoopTest {
   void stopsAtMaxIterationsWhenModelNeverConverges() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
     when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
-    when(promptBuilder.buildToolListBlock(any())).thenReturn("");
+    when(promptBuilder.buildToolListBlock()).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
         .thenReturn(List.of(Message.system("system prompt")));
@@ -113,7 +113,7 @@ class ReActLoopTest {
   void accumulatesMessagesInSession() {
     when(promptBuilder.buildSystemPrompt(any(), any())).thenReturn("system prompt");
     when(promptBuilder.buildMemoryBlock(any())).thenReturn("");
-    when(promptBuilder.buildToolListBlock(any())).thenReturn("");
+    when(promptBuilder.buildToolListBlock()).thenReturn("");
     when(promptBuilder.truncateHistory(any(), anyInt())).thenReturn(session.getMessages());
     when(promptBuilder.assembleMessages(any(), any(), any(), any()))
         .thenReturn(List.of(Message.system("system prompt")));

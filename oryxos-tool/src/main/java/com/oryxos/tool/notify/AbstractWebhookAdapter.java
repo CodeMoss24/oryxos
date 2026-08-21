@@ -71,7 +71,7 @@ abstract class AbstractWebhookAdapter implements NotifyChannelAdapter {
   protected static String requireUrl(NotifyTarget target, String type) {
     String url = target.config().get("url");
     if (url == null || url.isBlank()) {
-      throw new IllegalArgumentException(type + " 渠道缺少 url 配置(notify_channels 条目需要 url 键)");
+      throw new IllegalArgumentException(type + " 渠道缺少 url 配置(注册表渠道需要 url 键)");
     }
     return url;
   }

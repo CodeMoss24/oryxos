@@ -115,8 +115,8 @@ public class OryxOsApplication implements CommandLineRunner {
   }
 
   /**
-   * 装配层校验:provider 真实性(16 节显式映射)+ tools 未注册告警。均非阻断——非法 Agent 在 core 必填校验处已被 scanAndRegister
-   * 跳过,这里只对已注册的合法 Agent 做软告警,让运维知晓配置缺口。
+   * 装配层校验:provider 真实性(16 节显式映射)。均非阻断——非法 Agent 在 core 必填校验处已被 scanAndRegister 跳过, 这里只对已注册的合法 Agent
+   * 做软告警,让运维知晓配置缺口。31 节起 tools 走全局列表,不再有 per-Agent 工具告警。
    */
   private void validateRegisteredAgents() {
     Logger log = LoggerFactory.getLogger(OryxOsApplication.class);
@@ -129,7 +129,6 @@ public class OryxOsApplication implements CommandLineRunner {
             profile.getName(),
             providerName);
       }
-      agentLoader.warnUnregisteredTools(profile, toolRegistry);
     }
   }
 }

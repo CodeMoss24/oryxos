@@ -11,7 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * 第 29 节 harness:deriveProfile。 frontmatter 各字段正确映射到 Profile;尤其 schedules 原样带进派生 Profile(定时来自 Agent
- * 的直接证据); notify_channels 的 ${ENV} 占位解析。
+ * 的直接证据)。31 节起 tools / notify_channels 不再解析(全局列表 / 全局注册表是唯一真相源)。
  */
 @DisplayName("deriveProfile — frontmatter 字段映射到 Profile")
 class DeriveProfileTest {
@@ -41,7 +41,7 @@ class DeriveProfileTest {
   }
 
   @Test
-  @DisplayName("identity/provider/tools 全字段映射到 Profile")
+  @DisplayName("identity/provider 全字段映射到 Profile")
   void allFieldsMapped() {
     var parsed =
         parse(
@@ -54,11 +54,6 @@ class DeriveProfileTest {
                       name: deepseek
                       model: deepseek-chat
                       temperature: 0.2
-                    tools:
-                      - shell
-                      - read_file
-                      - notify
-                      - save_memory
                     """,
             "# body");
 
@@ -70,7 +65,30 @@ class DeriveProfileTest {
     assertThat(p.getProvider().name()).isEqualTo("deepseek");
     assertThat(p.getProvider().model()).isEqualTo("deepseek-chat");
     assertThat(p.getProvider().temperature()).isEqualTo(0.2);
-    assertThat(p.getTools()).containsExactly("shell", "read_file", "notify", "save_memory");
+  }
+
+  @Test
+  @DisplayName("31 节:frontmatter 里的 tools/notify_channels 不再解析(写没写都不进 Profile,也不报错)")
+  void legacyToolsAndNotifyChannelsIgnored() {
+    var parsed =
+        parse(
+            """
+                    provider:
+                      name: deepseek
+                      model: deepseek-chat
+                    tools:
+                      - shell
+                      - notify
+                    notify_channels:
+                      - type: webhook
+                        url: https://hooks.example.com/ops
+                    """,
+            "# body");
+
+    Profile p = loader.deriveProfile("daily-reconcile", parsed);
+    // 能正常派生(旧文件不报错),但这两个键不再产生 Profile 状态——工具走全局列表、通知出口走全局注册表
+    assertThat(p.getName()).isEqualTo("daily-reconcile");
+    assertThat(p.getProvider().name()).isEqualTo("deepseek");
   }
 
   @Test
@@ -102,28 +120,6 @@ class DeriveProfileTest {
     assertThat(morning.zone()).isEqualTo("Asia/Shanghai");
     assertThat(morning.message()).isEqualTo("到点了，核对昨天的订单对账。");
     assertThat(p.getSchedules().get(1).id()).isEqualTo("reconcile-evening");
-  }
-
-  @Test
-  @DisplayName("notify_channels 映射为 NotifyChannel(type + config)")
-  void notifyChannelsMappedToNotifyChannel() {
-    var parsed =
-        parse(
-            """
-                    provider:
-                      name: deepseek
-                      model: deepseek-chat
-                    notify_channels:
-                      - type: webhook
-                        url: https://hooks.example.com/ops
-                    """,
-            "# body");
-
-    Profile p = loader.deriveProfile("daily-reconcile", parsed);
-    assertThat(p.getNotifyChannels()).hasSize(1);
-    Profile.NotifyChannel ch = p.getNotifyChannels().get(0);
-    assertThat(ch.type()).isEqualTo("webhook");
-    assertThat(ch.config()).containsEntry("url", "https://hooks.example.com/ops");
   }
 
   @Test

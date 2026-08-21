@@ -35,7 +35,7 @@ class WebSmokeIT {
 
     assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(resp.getBody()).containsKeys("code", "message", "data", "timestamp");
-    assertThat(resp.getBody().get("code")).isEqualTo(200);
+    assertThat(resp.getBody().get("code")).isEqualTo(0); // ba79a1b 起成功 code 统一为 0
   }
 
   @Test

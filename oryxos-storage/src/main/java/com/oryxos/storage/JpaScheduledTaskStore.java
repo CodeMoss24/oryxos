@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * ScheduledTaskStore 的 JPA 实现(第 28 节,依赖倒置:契约在 core,实现在 storage)。
@@ -103,6 +104,13 @@ public class JpaScheduledTaskStore implements ScheduledTaskStore {
   @Override
   public boolean isEnabled(String taskId) {
     return taskRepo.findById(taskId).map(ScheduledTaskEntity::getEnabled).orElse(true);
+  }
+
+  @Override
+  @Transactional // 派生 deleteByXxx 命中实体执行 remove 需要事务(否则 No EntityManager ... 'remove' call)
+  public void delete(String taskId) {
+    executionRepo.deleteByTaskId(taskId); // 先删历史,再删任务(级联清理孤儿记录)
+    taskRepo.deleteById(taskId); // 不存在的 id 幂等跳过
   }
 
   @Override
